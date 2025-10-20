@@ -17,7 +17,7 @@
   },
   "keywords": ["student", "score", "management", "education"],
   "author": "",
-  "license": "MIT",
+  "license": "GPL-3.0-only",
   "devDependencies": {
     "concurrently": "^8.2.2"
   }
