@@ -79,4 +79,4 @@ Workload/
 
 ## 许可证
 
-GPL-3.0-only
+GPL-3.0 License
