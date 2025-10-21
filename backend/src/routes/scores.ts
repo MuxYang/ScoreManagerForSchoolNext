@@ -3,6 +3,7 @@ import db from '../models/database';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
 import logger from '../utils/logger';
 import { validateInput } from '../utils/inputValidation';
+import { matchStudentForAIImport, normalizeClassName } from '../utils/pinyinMatcher';
 
 const router = express.Router();
 
@@ -201,6 +202,236 @@ router.post('/batch', authenticateToken, (req: Request, res: Response) => {
   } catch (error) {
     logger.error('批量导入积分记录失败:', error);
     res.status(500).json({ error: '批量导入积分记录失败' });
+  }
+});
+
+// AI批量导入扣分记录（智能匹配，未匹配的进入待处理）
+router.post('/ai-import', authenticateToken, (req: Request, res: Response) => {
+  try {
+    const { records } = req.body;
+    const authReq = req as AuthRequest;
+
+    if (!Array.isArray(records) || records.length === 0) {
+      return res.status(400).json({ error: '导入数据格式错误' });
+    }
+
+    let successCount = 0;
+    let pendingCount = 0;
+    const errors: string[] = [];
+    const pendingRecords: any[] = [];
+
+    const insertScore = db.prepare(`
+      INSERT INTO scores (student_id, points, reason, teacher_name, date)
+      VALUES (?, ?, ?, ?, ?)
+    `);
+
+    const insertPending = db.prepare(`
+      INSERT INTO pending_scores (student_name, class_name, teacher_name, points, reason, date, raw_data, match_suggestions, created_by)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+
+    const transaction = db.transaction((records: any[]) => {
+      for (const record of records) {
+        try {
+          const { name, className, teacherName, points, reason, date } = record;
+
+          if (!name || points === undefined) {
+            errors.push(`跳过无效记录：缺少姓名或扣分`);
+            continue;
+          }
+
+          // 使用严格匹配模式（姓名拼音+班级）
+          const matchResult = matchStudentForAIImport(
+            db,
+            name,
+            className,
+            teacherName
+          );
+
+          if (matchResult.matched && matchResult.student) {
+            // 匹配成功，直接导入
+            insertScore.run(
+              matchResult.student.id,
+              points,
+              reason || '',
+              teacherName || '',
+              date || new Date().toISOString().split('T')[0]
+            );
+            successCount++;
+          } else {
+            // 匹配失败，移入待处理
+            const normalizedClass = className ? normalizeClassName(className) : '';
+            insertPending.run(
+              name,
+              normalizedClass,
+              teacherName || '',
+              points,
+              reason || '',
+              date || new Date().toISOString().split('T')[0],
+              JSON.stringify(record),
+              JSON.stringify(matchResult.suggestions || []),
+              authReq.userId
+            );
+            pendingCount++;
+            pendingRecords.push({
+              name,
+              className: normalizedClass,
+              points,
+              suggestions: matchResult.suggestions || []
+            });
+          }
+        } catch (error: any) {
+          errors.push(`导入失败：${error.message}`);
+        }
+      }
+    });
+
+    transaction(records);
+
+    // 记录日志
+    db.prepare('INSERT INTO logs (user_id, action, details) VALUES (?, ?, ?)')
+      .run(authReq.userId, 'AI_IMPORT_SCORES', JSON.stringify({
+        total: records.length,
+        successCount,
+        pendingCount,
+        errorCount: errors.length
+      }));
+
+    logger.info('AI批量导入扣分记录完成', {
+      total: records.length,
+      successCount,
+      pendingCount,
+      errorCount: errors.length
+    });
+
+    res.json({
+      success: true,
+      successCount,
+      pendingCount,
+      errorCount: errors.length,
+      errors: errors.slice(0, 10),
+      pendingRecords: pendingRecords.slice(0, 10),
+      message: `成功导入 ${successCount} 条，${pendingCount} 条待处理，${errors.length} 条失败`
+    });
+
+  } catch (error: any) {
+    logger.error('AI批量导入扣分记录失败:', error);
+    res.status(500).json({ error: 'AI批量导入失败: ' + error.message });
+  }
+});
+
+// 获取待处理记录列表
+router.get('/pending', authenticateToken, (req: Request, res: Response) => {
+  try {
+    const { status = 'pending', limit = 50, offset = 0 } = req.query;
+
+    const query = `
+      SELECT * FROM pending_scores
+      WHERE status = ?
+      ORDER BY created_at DESC
+      LIMIT ? OFFSET ?
+    `;
+
+    const records = db.prepare(query).all(status, Number(limit), Number(offset));
+    
+    // 解析 JSON 字段
+    const parsedRecords = records.map((record: any) => ({
+      ...record,
+      rawData: record.raw_data ? JSON.parse(record.raw_data) : null,
+      matchSuggestions: record.match_suggestions ? JSON.parse(record.match_suggestions) : []
+    }));
+
+    const totalCount = db.prepare('SELECT COUNT(*) as count FROM pending_scores WHERE status = ?')
+      .get(status) as { count: number };
+
+    res.json({
+      records: parsedRecords,
+      total: totalCount.count,
+      limit: Number(limit),
+      offset: Number(offset)
+    });
+  } catch (error) {
+    logger.error('获取待处理记录失败:', error);
+    res.status(500).json({ error: '获取待处理记录失败' });
+  }
+});
+
+// 手动处理待处理记录（确认匹配）
+router.post('/pending/:id/resolve', authenticateToken, (req: Request, res: Response) => {
+  try {
+    const { studentId } = req.body;
+    const pendingId = req.params.id;
+    const authReq = req as AuthRequest;
+
+    if (!studentId) {
+      return res.status(400).json({ error: '必须提供学生ID' });
+    }
+
+    // 获取待处理记录
+    const pending = db.prepare('SELECT * FROM pending_scores WHERE id = ?').get(pendingId) as any;
+
+    if (!pending) {
+      return res.status(404).json({ error: '待处理记录不存在' });
+    }
+
+    // 验证学生存在
+    const student = db.prepare('SELECT id FROM students WHERE id = ?').get(studentId);
+    if (!student) {
+      return res.status(400).json({ error: '学生不存在' });
+    }
+
+    // 创建扣分记录
+    db.prepare(`
+      INSERT INTO scores (student_id, points, reason, teacher_name, date)
+      VALUES (?, ?, ?, ?, ?)
+    `).run(studentId, pending.points, pending.reason, pending.teacher_name, pending.date);
+
+    // 更新待处理记录状态
+    db.prepare(`
+      UPDATE pending_scores
+      SET status = 'resolved', resolved_at = CURRENT_TIMESTAMP, resolved_by = ?
+      WHERE id = ?
+    `).run(authReq.userId, pendingId);
+
+    // 记录日志
+    db.prepare('INSERT INTO logs (user_id, action, details) VALUES (?, ?, ?)')
+      .run(authReq.userId, 'RESOLVE_PENDING_SCORE', JSON.stringify({ pendingId, studentId }));
+
+    logger.info('处理待处理记录成功', { pendingId, studentId });
+
+    res.json({ success: true, message: '记录已处理' });
+  } catch (error) {
+    logger.error('处理待处理记录失败:', error);
+    res.status(500).json({ error: '处理待处理记录失败' });
+  }
+});
+
+// 拒绝待处理记录
+router.post('/pending/:id/reject', authenticateToken, (req: Request, res: Response) => {
+  try {
+    const pendingId = req.params.id;
+    const authReq = req as AuthRequest;
+
+    const result = db.prepare(`
+      UPDATE pending_scores
+      SET status = 'rejected', resolved_at = CURRENT_TIMESTAMP, resolved_by = ?
+      WHERE id = ?
+    `).run(authReq.userId, pendingId);
+
+    if (result.changes === 0) {
+      return res.status(404).json({ error: '待处理记录不存在' });
+    }
+
+    // 记录日志
+    db.prepare('INSERT INTO logs (user_id, action, details) VALUES (?, ?, ?)')
+      .run(authReq.userId, 'REJECT_PENDING_SCORE', JSON.stringify({ pendingId }));
+
+    logger.info('拒绝待处理记录', { pendingId });
+
+    res.json({ success: true, message: '记录已拒绝' });
+  } catch (error) {
+    logger.error('拒绝待处理记录失败:', error);
+    res.status(500).json({ error: '拒绝待处理记录失败' });
   }
 });
 

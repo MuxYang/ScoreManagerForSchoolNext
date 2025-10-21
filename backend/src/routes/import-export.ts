@@ -215,6 +215,7 @@ router.post('/students/import', authenticateToken, (req: Request, res: Response)
     const errors: string[] = [];
 
     // 使用事务处理批量插入
+    // 注意：学生数据导入时，遇到重名不做特殊处理，按学号唯一性导入
     const insertStmt = db.prepare(`
       INSERT OR IGNORE INTO students (student_id, name, class)
       VALUES (?, ?, ?)
@@ -228,41 +229,18 @@ router.post('/students/import', authenticateToken, (req: Request, res: Response)
           const studentClass = normalizeClassName(row[mapping.class]?.toString().trim() || '');
 
           // 基本验证
-          if (!name || !studentClass) {
+          if (!studentId || !name || !studentClass) {
             failCount++;
-            errors.push(`跳过空数据行（缺少姓名或班级）：${JSON.stringify(row)}`);
+            errors.push(`跳过空数据行（缺少学号、姓名或班级）：${JSON.stringify(row)}`);
             continue;
           }
 
-          // 智能匹配：尝试从数据库中找到匹配的学生信息
-          const matchResult = matchStudentInfo(db, name, studentClass, studentId);
-          
-          let finalStudentId = studentId;
-          if (matchResult.matched && matchResult.student) {
-            // 如果匹配到已存在的学生，使用数据库中的学号
-            finalStudentId = matchResult.student.student_id;
-            logger.debug('学生信息智能匹配成功', {
-              inputName: name,
-              inputClass: studentClass,
-              inputStudentId: studentId,
-              matchedStudentId: finalStudentId,
-              matchedName: matchResult.student.name
-            });
-          }
-
-          // 如果最终还是没有学号，跳过
-          if (!finalStudentId) {
-            failCount++;
-            errors.push(`学号缺失且无法自动匹配：姓名=${name}, 班级=${studentClass}`);
-            continue;
-          }
-
-          const result = insertStmt.run(finalStudentId, name, studentClass);
+          const result = insertStmt.run(studentId, name, studentClass);
           if (result.changes > 0) {
             successCount++;
           } else {
             failCount++;
-            errors.push(`学号已存在：${finalStudentId}`);
+            errors.push(`学号已存在：${studentId} (${name})`);
           }
         } catch (error: any) {
           failCount++;

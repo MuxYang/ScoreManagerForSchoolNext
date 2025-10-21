@@ -125,6 +125,28 @@ export function initializeDatabase() {
     )
   `);
 
+  // 待处理扣分记录表（用于AI导入时无法精确匹配的记录）
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS pending_scores (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      student_name TEXT NOT NULL,
+      class_name TEXT,
+      teacher_name TEXT,
+      points REAL NOT NULL,
+      reason TEXT,
+      date DATE DEFAULT CURRENT_DATE,
+      raw_data TEXT,
+      match_suggestions TEXT,
+      status TEXT DEFAULT 'pending',
+      created_by INTEGER,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      resolved_at DATETIME,
+      resolved_by INTEGER,
+      FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL,
+      FOREIGN KEY (resolved_by) REFERENCES users(id) ON DELETE SET NULL
+    )
+  `);
+
   // 创建索引
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_students_student_id ON students(student_id);

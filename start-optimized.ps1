@@ -6,37 +6,97 @@ Write-Host "   Student Score System - Starting" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
 
+function Stop-ProcessByPort {
+    param (
+        [Parameter(Mandatory=$true)]
+        [int]$Port
+    )
+    Write-Host "Attempting to stop processes on port $Port..." -ForegroundColor Yellow
+    Get-NetTCPConnection -LocalPort $Port | ForEach-Object {
+        $procId = $_.OwningProcess
+        if ($procId -ne 0) {
+            try {
+                Stop-Process -Id $procId -Force -ErrorAction SilentlyContinue
+                Write-Host "Stopped process with PID $procId on port $Port." -ForegroundColor Green
+            } catch {
+                $errMsg = $error[0].Exception.Message
+                Write-Host ('Failed to stop process with PID ' + $procId + ' on port ' + $Port + ': ' + $errMsg) -ForegroundColor Red
+            }
+        }
+    }
+}
+
 # Check Node.js
 Write-Host "[1/5] Checking environment..." -ForegroundColor Yellow
 try {
     $nodeVersion = node --version
     Write-Host "OK Node.js $nodeVersion" -ForegroundColor Green
 } catch {
-    Write-Host "ERROR Node.js not installed: https://nodejs.org/" -ForegroundColor Red
+    Write-Host "Node.js is not installed or not in PATH." -ForegroundColor Red
+    $title = "Node.js Installation"
+    $message = "Do you want to automatically download and install Node.js?"
+    $choices = [System.Management.Automation.Host.ChoiceDescription[]]@("&Yes", "&No")
+    $decision = $Host.UI.PromptForChoice($title, $message, $choices, 0)
+
+    if ($decision -eq 0) {
+        $arch = $env:PROCESSOR_ARCHITECTURE
+        $url = ""
+        $fileName = ""
+
+        if ($arch -eq "AMD64") {
+            $url = "https://nodejs.org/dist/v22.21.0/node-v22.21.0-x64.msi"
+            $fileName = "node-v22.21.0-x64.msi"
+        } elseif ($arch -eq "x86") {
+            $url = "https://nodejs.org/dist/v22.21.0/node-v22.21.0-x86.msi"
+            $fileName = "node-v22.21.0-x86.msi"
+        } elseif ($arch -eq "ARM64") {
+            $url = "https://nodejs.org/dist/v22.21.0/node-v22.21.0-arm64.msi"
+            $fileName = "node-v22.21.0-arm64.msi"
+        } else {
+            Write-Host "Unsupported architecture: $arch" -ForegroundColor Red
+            pause
+            exit 1
+        }
+
+        Write-Host "Downloading Node.js for $arch..." -ForegroundColor Yellow
+        $downloadPath = Join-Path $PSScriptRoot $fileName
+        Invoke-WebRequest -Uri $url -OutFile $downloadPath
+
+        Write-Host "Installing Node.js... This may take a few minutes." -ForegroundColor Yellow
+        Start-Process msiexec.exe -ArgumentList "/i `"$downloadPath`" /quiet" -Wait
+
+        Write-Host "Node.js installation complete." -ForegroundColor Green
+        Write-Host "Please close this window and run the script again." -ForegroundColor Yellow
+        Remove-Item $downloadPath
+    } else {
+        Write-Host "Node.js installation skipped." -ForegroundColor Yellow
+    }
     pause
     exit 1
+}
+
+# Ensure .env file exists
+Write-Host "[1.5/5] Ensuring .env file exists..." -ForegroundColor Yellow
+$envPath = Join-Path $PSScriptRoot "backend\.env"
+if (-Not (Test-Path $envPath)) {
+    Write-Host "Creating .env file..." -ForegroundColor Yellow
+    Copy-Item (Join-Path $PSScriptRoot "backend\.env.example") $envPath -Force
+    Write-Host "OK .env file created" -ForegroundColor Green
 }
 
 # Check and install dependencies
 Write-Host ""
 Write-Host "[2/5] Checking dependencies..." -ForegroundColor Yellow
 
-$backendNodeModules = Join-Path $PSScriptRoot "backend\node_modules"
-$frontendNodeModules = Join-Path $PSScriptRoot "frontend\node_modules"
+Write-Host "Installing/updating backend dependencies..." -ForegroundColor Yellow
+Set-Location (Join-Path $PSScriptRoot "backend")
+npm install --silent
+Set-Location $PSScriptRoot
 
-if (-Not (Test-Path $backendNodeModules)) {
-    Write-Host "Installing backend dependencies..." -ForegroundColor Yellow
-    Set-Location (Join-Path $PSScriptRoot "backend")
-    npm install --silent
-    Set-Location $PSScriptRoot
-}
-
-if (-Not (Test-Path $frontendNodeModules)) {
-    Write-Host "Installing frontend dependencies..." -ForegroundColor Yellow
-    Set-Location (Join-Path $PSScriptRoot "frontend")
-    npm install --silent
-    Set-Location $PSScriptRoot
-}
+Write-Host "Installing/updating frontend dependencies..." -ForegroundColor Yellow
+Set-Location (Join-Path $PSScriptRoot "frontend")
+npm install --silent
+Set-Location $PSScriptRoot
 
 Write-Host "OK Dependencies ready" -ForegroundColor Green
 
@@ -54,8 +114,16 @@ $rootLogs = Join-Path $PSScriptRoot "logs"
 }
 Write-Host "OK Directories initialized" -ForegroundColor Green
 
-# Check first run (database file exists?)
-$databasePath = Join-Path $PSScriptRoot "backend\data\database.sqlite"
+# 检查并释放 3000 和 5173 端口
+Write-Host "[3.5/5] Checking and releasing ports 3000, 5173..." -ForegroundColor Yellow
+Stop-ProcessByPort -Port 3000
+Stop-ProcessByPort -Port 5173
+Start-Sleep -Seconds 1
+Write-Host "OK Ports checked and released if needed" -ForegroundColor Green
+
+
+# Check first run (database.db exists?)
+$databasePath = Join-Path $PSScriptRoot "backend\data\database.db"
 $isFirstRun = -Not (Test-Path $databasePath)
 
 # Start backend (silent mode)
@@ -118,7 +186,11 @@ if ($isFirstRun) {
     Write-Host "System will auto-create admin account" -ForegroundColor Yellow
     Write-Host "Please check backend logs below for account info!" -ForegroundColor Yellow
     Write-Host ""
-    Start-Sleep -Seconds 1
+    Start-Sleep -Seconds 5
+    # 自动打开前端页面
+    $frontendUrl = "http://localhost:5173"
+    Write-Host "Opening browser: $frontendUrl" -ForegroundColor Cyan
+    Start-Process $frontendUrl
 }
 
 # Show real-time backend logs
@@ -203,6 +275,9 @@ try {
     
     # Wait for processes to fully exit
     Start-Sleep -Seconds 1
+
+    Stop-ProcessByPort -Port 3000
+    Stop-ProcessByPort -Port 5173
     
     Write-Host "OK All services stopped" -ForegroundColor Green
     Write-Host ""

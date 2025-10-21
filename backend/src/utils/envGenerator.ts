@@ -19,6 +19,7 @@ export function ensureEnvFile(): void {
   }
 
   console.log('检测到首次运行，正在生成 .env 配置文件...');
+  console.log(`__dirname resolved to: ${__dirname}`);
   
   if (!fs.existsSync(envExamplePath)) {
     console.error('❌ 错误：找不到 .env.example 文件');
@@ -37,18 +38,18 @@ export function ensureEnvFile(): void {
       `JWT_SECRET=${jwtSecret}`
     );
     
-    // 生成随机的 COOKIE_SECRET（64字符十六进制 = 32字节）
-    const cookieSecret = crypto.randomBytes(32).toString('hex');
+    // 生成随机的 ENCRYPTION_KEY（64字符十六进制 = 32字节）
+    const encryptionKey = crypto.randomBytes(32).toString('hex');
     envContent = envContent.replace(
-      'COOKIE_SECRET=your-cookie-secret-key-change-this-in-production',
-      `COOKIE_SECRET=${cookieSecret}`
+      'ENCRYPTION_KEY=your-encryption-key-change-this',
+      `ENCRYPTION_KEY=${encryptionKey}`
     );
     
     // 写入 .env 文件
     fs.writeFileSync(envPath, envContent, 'utf-8');
     
     console.log('✅ .env 配置文件已生成');
-    console.log('🔐 已自动生成安全密钥（JWT_SECRET 和 COOKIE_SECRET）');
+    console.log('🔐 已自动生成安全密钥（JWT_SECRET 和 ENCRYPTION_KEY）');
     console.log(`📁 文件位置: ${envPath}`);
   } catch (error) {
     console.error('❌ 生成 .env 文件时出错:', error);

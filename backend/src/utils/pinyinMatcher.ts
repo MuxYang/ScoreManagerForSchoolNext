@@ -180,8 +180,153 @@ export function normalizeTeachingClasses(classesStr: string): string {
 }
 
 /**
- * 智能匹配学生信息
- * 根据姓名和班级尝试从数据库中匹配已存在的学生，自动填充学号等信息
+ * 智能匹配学生信息（用于AI导入扣分记录）
+ * 严格模式：必须同时匹配姓名拼音和班级，否则返回未匹配
+ * @param db 数据库连接
+ * @param name 学生姓名
+ * @param className 班级名称（必填）
+ * @param teacherName 教师姓名（可选，用于辅助匹配班级）
+ * @returns 匹配结果 { matched: boolean, student?: any, suggestions?: any[] }
+ */
+export function matchStudentForAIImport(
+  db: any,
+  name: string,
+  className?: string,
+  teacherName?: string
+): { matched: boolean; student?: any; suggestions?: any[] } {
+  try {
+    if (!name) {
+      return { matched: false };
+    }
+
+    // AI导入时，班级是必需的
+    if (!className && !teacherName) {
+      return { matched: false };
+    }
+
+    let normalizedClass = className ? normalizeClassName(className) : null;
+    
+    // 如果没有提供班级但提供了教师姓名，尝试通过教师匹配班级
+    if (!normalizedClass && teacherName) {
+      const teacherInfo = db.prepare(`
+        SELECT teaching_classes FROM teachers WHERE name = ?
+      `).get(teacherName);
+      
+      if (teacherInfo && teacherInfo.teaching_classes) {
+        // 取第一个任教班级作为参考
+        const classes = teacherInfo.teaching_classes.split(';');
+        if (classes.length > 0) {
+          normalizedClass = classes[0];
+        }
+      }
+      
+      // 如果还是没有班级信息，尝试拼音匹配教师
+      if (!normalizedClass) {
+        const allTeachers = db.prepare(`
+          SELECT name, teaching_classes FROM teachers
+        `).all();
+        
+        for (const teacher of allTeachers) {
+          if (fuzzyMatchPinyin(teacher.name, teacherName) && teacher.teaching_classes) {
+            const classes = teacher.teaching_classes.split(';');
+            if (classes.length > 0) {
+              normalizedClass = classes[0];
+              break;
+            }
+          }
+        }
+      }
+    }
+    
+    // 如果最终还是没有班级信息，返回未匹配
+    if (!normalizedClass) {
+      return { matched: false };
+    }
+    
+    // 1. 尝试姓名+班级精确匹配
+    const exactMatch = db.prepare(`
+      SELECT id, student_id, name, class FROM students 
+      WHERE name = ? AND class = ?
+    `).get(name, normalizedClass);
+    
+    if (exactMatch) {
+      return { matched: true, student: exactMatch };
+    }
+    
+    // 2. 尝试拼音+班级匹配（严格模式：必须两者都匹配）
+    const sameClassStudents = db.prepare(`
+      SELECT id, student_id, name, class FROM students WHERE class = ?
+    `).all(normalizedClass);
+    
+    const pinyinMatches = [];
+    for (const student of sameClassStudents) {
+      if (fuzzyMatchPinyin(student.name, name)) {
+        pinyinMatches.push(student);
+      }
+    }
+    
+    // 如果只有一个拼音匹配，认为是精确匹配
+    if (pinyinMatches.length === 1) {
+      return { matched: true, student: pinyinMatches[0] };
+    }
+    
+    // 如果有多个拼音匹配（同班同名），返回未匹配，但提供建议
+    if (pinyinMatches.length > 1) {
+      return { 
+        matched: false, 
+        suggestions: pinyinMatches.map(s => ({
+          id: s.id,
+          studentId: s.student_id,
+          name: s.name,
+          class: s.class,
+          matchReason: '姓名拼音相同，班级相同'
+        }))
+      };
+    }
+    
+    // 3. 查找其他班级中的同名学生（作为建议）
+    const otherClassStudents = db.prepare(`
+      SELECT id, student_id, name, class FROM students WHERE name = ? AND class != ?
+    `).all(name, normalizedClass);
+    
+    const suggestions = otherClassStudents.map((s: any) => ({
+      id: s.id,
+      studentId: s.student_id,
+      name: s.name,
+      class: s.class,
+      matchReason: '姓名相同，但班级不同'
+    }));
+    
+    // 也查找同班级中拼音相似的学生
+    for (const student of sameClassStudents) {
+      const studentPinyin = toPinyin(student.name);
+      const inputPinyin = toPinyin(name);
+      
+      // 计算相似度（简单的包含关系检查）
+      if (studentPinyin.includes(inputPinyin) || inputPinyin.includes(studentPinyin)) {
+        suggestions.push({
+          id: student.id,
+          studentId: student.student_id,
+          name: student.name,
+          class: student.class,
+          matchReason: '拼音相似，班级相同'
+        });
+      }
+    }
+    
+    return { 
+      matched: false,
+      suggestions: suggestions.slice(0, 5) // 最多返回5个建议
+    };
+  } catch (error) {
+    console.error('Error matching student for AI import:', error);
+    return { matched: false };
+  }
+}
+
+/**
+ * 智能匹配学生信息（用于普通数据导入）
+ * 宽松模式：遇到重名不做特殊处理，按原有逻辑导入
  * @param db 数据库连接
  * @param name 学生姓名
  * @param className 班级名称

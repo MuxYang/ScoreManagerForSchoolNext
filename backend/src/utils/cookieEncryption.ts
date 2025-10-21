@@ -69,14 +69,19 @@ export function extractBrowserFingerprint(userAgent: string, acceptLanguage?: st
 
 /**
  * Cookie 数据结构
+ * Cookie中加密包含以下信息，所有条件必须同时满足才能自动登录：
+ * 1. 用户名和密码（能够解锁数据库中的用户）
+ * 2. UA（浏览器指纹）一致
+ * 3. 上一次操作的时间戳与当前时间不超过300秒
+ * 4. 后端sessionID匹配（服务器重启后sessionID会变化）
  */
 export interface SecureCookieData {
-  username: string;
-  userId: number;
-  passwordHash: string;   // 用户密码哈希（用于数据库加密密钥派生）
-  sessionId: string;      // 服务器 session ID
-  timestamp: number;      // 创建时间戳
-  browserFingerprint: string; // 浏览器指纹
+  username: string;           // 用户名
+  userId: number;             // 用户ID
+  passwordHash: string;       // 用户密码哈希（必须与数据库中的密码哈希匹配）
+  sessionId: string;          // 服务器session ID（服务器启动时生成，单个session不变）
+  timestamp: number;          // 上一次操作的时间戳（用于验证5分钟超时）
+  browserFingerprint: string; // 浏览器指纹（UA + 语言等）
 }
 
 /**
@@ -178,7 +183,9 @@ export function decryptCookie(encryptedCookie: string): SecureCookieData | null 
 }
 
 /**
- * 验证 Cookie 是否有效
+ * 验证 Cookie 基本信息是否有效
+ * 注意：此函数只验证 sessionId、时间戳和浏览器指纹
+ * 密码验证需要在中间件中进行（需要访问数据库）
  */
 export function validateCookie(
   cookieData: SecureCookieData, 

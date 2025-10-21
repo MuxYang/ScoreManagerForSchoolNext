@@ -22,10 +22,19 @@ import {
 
 const router = express.Router();
 
-// JWT_SECRET 必须通过环境变量设置
-const JWT_SECRET = process.env.JWT_SECRET as string;
-if (!JWT_SECRET) {
-  throw new Error('JWT_SECRET 环境变量未设置');
+// JWT_SECRET 获取函数（延迟检查，确保.env已加载）
+function getJwtSecret(): string {
+  const secret = process.env.JWT_SECRET;
+  if (!secret) {
+    throw new Error('JWT_SECRET 环境变量未设置');
+  }
+  return secret;
+}
+
+// JWT_EXPIRES_IN 获取函数（延迟检查，确保.env已加载）
+function getJwtExpiresIn(): string {
+  const expiresIn = process.env.JWT_EXPIRES_IN || '24h';
+  return expiresIn;
 }
 
 // 速率限制配置
@@ -195,8 +204,8 @@ router.post('/login', loginLimiter, async (req: Request, res: Response) => {
     // Generate JWT
     const token = jwt.sign(
       { userId: user.id, username: user.username },
-      JWT_SECRET,
-      { expiresIn: process.env.JWT_EXPIRES_IN || '24h' } as jwt.SignOptions
+      getJwtSecret(),
+      { expiresIn: getJwtExpiresIn() } as jwt.SignOptions
     );
 
     // Log the action
@@ -236,9 +245,10 @@ router.post('/login', loginLimiter, async (req: Request, res: Response) => {
     
     logger.debug('Auth cookie set', { username, expiresIn: '5 minutes' });
 
-    // 同时在响应体中返回 token（兼容现有实现）
+    // 返回 token、用户信息和加密的cookie（供前端存储）
     return res.json({ 
       token,
+      encryptedCookie, // 前端可以存储并用于自动登录验证
       user: { 
         id: user.id, 
         username: user.username,
@@ -449,8 +459,8 @@ router.post('/verify-cookie', async (req: Request, res: Response) => {
     // 生成新的 JWT token
     const token = jwt.sign(
       { userId: user.id, username: user.username },
-      JWT_SECRET,
-      { expiresIn: process.env.JWT_EXPIRES_IN || '24h' } as jwt.SignOptions
+      getJwtSecret(),
+      { expiresIn: getJwtExpiresIn() } as jwt.SignOptions
     );
 
     // 创建新的 Cookie（更新时间戳）

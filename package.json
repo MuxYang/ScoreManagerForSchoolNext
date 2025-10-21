@@ -1,6 +1,6 @@
 {
   "name": "score-manager-workspace",
-  "version": "1.0.0-beta2",
+  "version": "1.0.0-beta3",
   "description": "学生扣分管理系统工作区",
   "private": true,
   "scripts": {

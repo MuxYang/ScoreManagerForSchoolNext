@@ -21,18 +21,6 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 // 超时时间：10 分钟（毫秒）
 const INACTIVITY_TIMEOUT = 10 * 60 * 1000;
 
-/**
- * 从浏览器 Cookie 中读取指定名称的 Cookie
- */
-function getCookie(name: string): string | null {
-  const value = `; ${document.cookie}`;
-  const parts = value.split(`; ${name}=`);
-  if (parts.length === 2) {
-    return parts.pop()?.split(';').shift() || null;
-  }
-  return null;
-}
-
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(null);
@@ -46,6 +34,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setUser(null);
     localStorage.removeItem('token');
     localStorage.removeItem('user');
+    localStorage.removeItem('encryptedCookie');
     localStorage.removeItem('lastActivity');
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current);
@@ -93,42 +82,45 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       hasTriedCookieAuth.current = true;
 
       try {
-        // 1. 尝试从 localStorage 恢复
+        // 1. 尝试从 localStorage 恢复（包括加密cookie）
         const savedToken = localStorage.getItem('token');
         const savedUser = localStorage.getItem('user');
+        const savedEncryptedCookie = localStorage.getItem('encryptedCookie');
         
-        if (savedToken && savedUser) {
+        if (savedToken && savedUser && savedEncryptedCookie) {
           // 检查是否超时
           if (!checkTimeout()) {
-            setToken(savedToken);
-            setUser(JSON.parse(savedUser));
-            resetTimeout();
-            console.log('从 localStorage 恢复登录状态');
-            setIsLoading(false);
-            return;
+            // 验证加密cookie是否仍然有效
+            try {
+              const response = await authAPI.verifyCookie(savedEncryptedCookie);
+              const { token: newToken, user: newUser, encryptedCookie: newEncryptedCookie } = response.data;
+              
+              // Cookie验证成功，使用新的token和cookie
+              setToken(newToken);
+              setUser(newUser);
+              
+              // 更新localStorage
+              localStorage.setItem('token', newToken);
+              localStorage.setItem('user', JSON.stringify(newUser));
+              localStorage.setItem('encryptedCookie', newEncryptedCookie);
+              
+              resetTimeout();
+              console.log('Cookie 自动登录成功', { username: newUser.username });
+              setIsLoading(false);
+              return;
+            } catch (error: any) {
+              // Cookie验证失败，清除本地数据
+              console.warn('Cookie 验证失败，需要重新登录:', error.response?.data?.code || error.message);
+              clearAuth();
+            }
+          } else {
+            // 超时，清除数据
+            console.log('会话超时，需要重新登录');
+            clearAuth();
           }
         }
 
-        // 2. 尝试从 Cookie 自动登录
-        const authCookie = getCookie('auth_session');
-        if (authCookie) {
-          console.log('检测到 auth_session Cookie，尝试自动登录...');
-          
-          const response = await authAPI.verifyCookie(authCookie);
-          const { token: newToken, user: newUser } = response.data;
-          
-          setToken(newToken);
-          setUser(newUser);
-          
-          // 保存到 localStorage
-          localStorage.setItem('token', newToken);
-          localStorage.setItem('user', JSON.stringify(newUser));
-          
-          resetTimeout();
-          console.log('Cookie 自动登录成功', { username: newUser.username });
-        } else {
-          console.log('未找到有效的 Cookie，需要手动登录');
-        }
+        console.log('未找到有效的登录信息，需要手动登录');
       } catch (error) {
         console.warn('自动登录失败:', error);
         clearAuth();
@@ -171,13 +163,16 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const login = async (username: string, password: string) => {
     const response = await authAPI.login(username, password);
-    const { token: newToken, user: newUser } = response.data;
+    const { token: newToken, user: newUser, encryptedCookie } = response.data;
     
     setToken(newToken);
     setUser(newUser);
     
     localStorage.setItem('token', newToken);
     localStorage.setItem('user', JSON.stringify(newUser));
+    if (encryptedCookie) {
+      localStorage.setItem('encryptedCookie', encryptedCookie);
+    }
     
     // 重置超时计时器
     resetTimeout();
