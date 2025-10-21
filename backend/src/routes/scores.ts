@@ -348,6 +348,11 @@ router.get('/pending', authenticateToken, (req: Request, res: Response) => {
       rawData: record.raw_data ? JSON.parse(record.raw_data) : null,
       matchSuggestions: record.match_suggestions ? JSON.parse(record.match_suggestions) : []
     }));
+    
+    logger.info('返回待处理记录', { 
+      count: parsedRecords.length, 
+      sample: parsedRecords[0] || null 
+    });
 
     const totalCount = db.prepare('SELECT COUNT(*) as count FROM pending_scores WHERE status = ?')
       .get(status) as { count: number };

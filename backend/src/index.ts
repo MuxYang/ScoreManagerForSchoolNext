@@ -24,6 +24,7 @@ import teacherRoutes from './routes/teachers';
 import scoreRoutes from './routes/scores';
 import backupRoutes from './routes/backup';
 import importExportRoutes from './routes/import-export';
+import userConfigRoutes from './routes/userConfig';
 
 const app = express();
 const PORT = parseInt(process.env.PORT || '3000', 10);
@@ -112,6 +113,7 @@ app.use('/api/teachers', teacherRoutes);
 app.use('/api/scores', scoreRoutes);
 app.use('/api/backup', backupRoutes);
 app.use('/api/import-export', importExportRoutes);
+app.use('/api/user-config', userConfigRoutes);
 
 // 404 处理
 app.use(notFoundHandler);

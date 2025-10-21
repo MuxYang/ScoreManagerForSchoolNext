@@ -145,4 +145,11 @@ export const importExportAPI = {
     apiClient.post('/import-export/teachers/import', { data, mapping }),
 };
 
+// 用户配置 API
+export const userConfigAPI = {
+  save: (config: any) => apiClient.post('/user-config/save', { config }),
+  get: () => apiClient.get('/user-config/get'),
+  clear: () => apiClient.post('/user-config/clear'),
+};
+
 export default apiClient;

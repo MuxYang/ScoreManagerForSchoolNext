@@ -255,16 +255,26 @@ const PendingRecordsPage: React.FC = () => {
 
         if (!matchedStudent) {
           failCount++;
-          console.error('未找到匹配的学生:', record.studentName);
+          console.error('未找到匹配的学生:', record.studentName, '可用学生:', students.slice(0, 3));
           continue;
         }
 
         try {
+          console.log('准备处理待处理记录:', { 
+            pendingId: record.id, 
+            studentId: matchedStudent.id, 
+            studentName: matchedStudent.name,
+            recordName: record.studentName 
+          });
           await scoreAPI.resolvePending(record.id!, matchedStudent.id);
           successCount++;
-        } catch (err) {
+        } catch (err: any) {
           failCount++;
-          console.error('添加记录失败:', record, err);
+          console.error('添加记录失败:', {
+            record,
+            error: err.response?.data || err.message,
+            matchedStudent
+          });
         }
       }
 
