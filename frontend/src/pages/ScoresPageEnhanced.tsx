@@ -445,19 +445,9 @@ const ScoresPageEnhanced: React.FC = () => {
         });
       });
 
-      // 保存待处理记录到 localStorage
+      // 不再保存到 localStorage，所有记录通过 AI 导入 API 处理
       if (pendingRecords.length > 0) {
-        try {
-          const existingPending = localStorage.getItem('pendingRecords');
-          const existing = existingPending ? JSON.parse(existingPending) : [];
-          const updated = [...existing, ...pendingRecords];
-          localStorage.setItem('pendingRecords', JSON.stringify(updated));
-          
-          setSuccess(`AI 成功解析 ${parsed.length} 条数据，${pendingRecords.length} 条待处理记录已移至待处理页面`);
-        } catch (err) {
-          console.error('保存待处理记录失败:', err);
-          setSuccess(`AI 成功解析 ${parsed.length} 条数据，但 ${pendingRecords.length} 条待处理记录保存失败`);
-        }
+        setSuccess(`AI 成功解析 ${parsed.length} 条数据，${pendingRecords.length} 条记录需要补充学生信息`);
       } else {
         setSuccess(`AI 成功解析 ${parsed.length} 条数据`);
       }
