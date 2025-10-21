@@ -20,6 +20,7 @@ logs/
 
 # 文档（不上传到 GitHub）
 docs/
+BUG_FIX_TEST_GUIDE.md
 
 # IDE
 .vscode/
