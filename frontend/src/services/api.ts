@@ -120,10 +120,22 @@ export const importExportAPI = {
     apiClient.get('/import-export/students/excel', { responseType: 'blob' }),
   exportScoresExcel: () => 
     apiClient.get('/import-export/scores/excel', { responseType: 'blob' }),
-  parseFile: (fileData: string, fileType: string, hasHeader: boolean) =>
-    apiClient.post('/import-export/parse', { fileData, fileType, hasHeader }),
+  // 上传并解析文件
+  parseFile: (file: File) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    return apiClient.post('/import-export/parse', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    });
+  },
   parseText: (text: string, dataType: string) =>
     apiClient.post('/import-export/parse-text', { text, dataType }),
+  // 批量导入学生
+  importStudents: (data: any[], mapping: any) =>
+    apiClient.post('/import-export/students/import', { data, mapping }),
+  // 批量导入教师
+  importTeachers: (data: any[], mapping: any) =>
+    apiClient.post('/import-export/teachers/import', { data, mapping }),
 };
 
 export default apiClient;

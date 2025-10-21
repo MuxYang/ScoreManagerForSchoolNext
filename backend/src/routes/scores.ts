@@ -2,6 +2,7 @@ import express, { Request, Response } from 'express';
 import db from '../models/database';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
 import logger from '../utils/logger';
+import { validateInput } from '../utils/inputValidation';
 
 const router = express.Router();
 
@@ -72,6 +73,23 @@ router.post('/', authenticateToken, (req: Request, res: Response) => {
 
     if (!studentId || points === undefined) {
       return res.status(400).json({ error: '学生ID和积分是必填的' });
+    }
+
+    // 安全检查
+    if (reason) {
+      const reasonValidation = validateInput(reason, { maxLength: 200 });
+      if (!reasonValidation.valid) {
+        logger.warn('添加积分被阻止：原因包含非法字符', { reason });
+        return res.status(400).json({ error: '原因包含非法字符' });
+      }
+    }
+
+    if (teacherName) {
+      const teacherValidation = validateInput(teacherName, { maxLength: 50 });
+      if (!teacherValidation.valid) {
+        logger.warn('添加积分被阻止：教师姓名包含非法字符', { teacherName });
+        return res.status(400).json({ error: '教师姓名包含非法字符' });
+      }
     }
 
     const result = db.prepare(`

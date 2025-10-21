@@ -1,11 +1,10 @@
 import Database from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
-import crypto from 'crypto-js';
+import nodeCrypto from 'crypto';
 import bcrypt from 'bcryptjs';
 
 const DB_PATH = process.env.DB_PATH || './data/database.db';
-const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY || 'default-key';
 
 // 确保数据目录存在
 const dbDir = path.dirname(DB_PATH);
@@ -54,14 +53,35 @@ export function initializeDatabase() {
       name TEXT NOT NULL,
       subject TEXT NOT NULL,
       grade TEXT,
+      phone TEXT,
+      email TEXT,
+      teaching_classes TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `);
 
-  // 添加grade字段（如果不存在）
+  // 添加新字段（如果不存在）
   try {
     db.exec(`ALTER TABLE teachers ADD COLUMN grade TEXT`);
+  } catch (err) {
+    // 字段已存在，忽略错误
+  }
+
+  try {
+    db.exec(`ALTER TABLE teachers ADD COLUMN phone TEXT`);
+  } catch (err) {
+    // 字段已存在，忽略错误
+  }
+
+  try {
+    db.exec(`ALTER TABLE teachers ADD COLUMN email TEXT`);
+  } catch (err) {
+    // 字段已存在，忽略错误
+  }
+
+  try {
+    db.exec(`ALTER TABLE teachers ADD COLUMN teaching_classes TEXT`);
   } catch (err) {
     // 字段已存在，忽略错误
   }
@@ -119,15 +139,33 @@ export function initializeDatabase() {
   console.log('Database initialized');
 }
 
-// Encrypt password (for backup recovery)
+// Encrypt password (for backup recovery) using Node.js crypto
 export function encryptPassword(password: string, securityAnswer: string): string {
-  return crypto.AES.encrypt(password, securityAnswer).toString();
+  const algorithm = 'aes-256-cbc';
+  const key = nodeCrypto.createHash('sha256').update(securityAnswer).digest();
+  const iv = nodeCrypto.randomBytes(16);
+  
+  const cipher = nodeCrypto.createCipheriv(algorithm, key, iv);
+  let encrypted = cipher.update(password, 'utf8', 'hex');
+  encrypted += cipher.final('hex');
+  
+  return iv.toString('hex') + ':' + encrypted;
 }
 
-// Decrypt password
+// Decrypt password using Node.js crypto
 export function decryptPassword(encryptedPassword: string, securityAnswer: string): string {
-  const bytes = crypto.AES.decrypt(encryptedPassword, securityAnswer);
-  return bytes.toString(crypto.enc.Utf8);
+  const algorithm = 'aes-256-cbc';
+  const key = nodeCrypto.createHash('sha256').update(securityAnswer).digest();
+  
+  const parts = encryptedPassword.split(':');
+  const iv = Buffer.from(parts[0], 'hex');
+  const encrypted = parts[1];
+  
+  const decipher = nodeCrypto.createDecipheriv(algorithm, key, iv);
+  let decrypted = decipher.update(encrypted, 'hex', 'utf8');
+  decrypted += decipher.final('utf8');
+  
+  return decrypted;
 }
 
 // 检查用户数量（系统只允许单个用户）

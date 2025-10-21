@@ -65,11 +65,23 @@ app.use(cors({
 // Cookie parser middleware
 app.use(cookieParser());
 
-// Rate limiting
+// 全局 API 速率限制（较宽松，防止大规模攻击）
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // Limit each IP to 100 requests per windowMs
-  message: 'Too many requests, please try again later'
+  windowMs: 15 * 60 * 1000, // 15 分钟
+  max: 150, // 每个 IP 最多 150 个请求（提高到 150，因为有单独的登录限制）
+  message: '请求过于频繁，请稍后再试',
+  standardHeaders: true, // 返回 RateLimit-* 响应头
+  legacyHeaders: false,
+  handler: (req, res) => {
+    logger.warn('全局速率限制触发', { 
+      ip: req.ip,
+      path: req.path,
+      userAgent: req.headers['user-agent']
+    });
+    res.status(429).json({ 
+      error: '请求过于频繁，请稍后再试' 
+    });
+  }
 });
 app.use(limiter);
 

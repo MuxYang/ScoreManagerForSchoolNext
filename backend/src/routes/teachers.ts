@@ -2,6 +2,7 @@ import express, { Request, Response } from 'express';
 import db from '../models/database';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
 import logger from '../utils/logger';
+import { validateInput } from '../utils/inputValidation';
 
 const router = express.Router();
 
@@ -70,6 +71,35 @@ router.post('/', authenticateToken, (req: Request, res: Response) => {
     
     if (!name || !subject) {
       return res.status(400).json({ error: '姓名和科目为必填项' });
+    }
+    
+    // 安全检查
+    const nameValidation = validateInput(name, { maxLength: 50 });
+    if (!nameValidation.valid) {
+      logger.warn('添加教师被阻止：姓名包含非法字符', { name });
+      return res.status(400).json({ error: '姓名包含非法字符' });
+    }
+
+    const subjectValidation = validateInput(subject, { maxLength: 50 });
+    if (!subjectValidation.valid) {
+      logger.warn('添加教师被阻止：科目包含非法字符', { subject });
+      return res.status(400).json({ error: '科目包含非法字符' });
+    }
+
+    if (phone) {
+      const phoneValidation = validateInput(phone, { maxLength: 20 });
+      if (!phoneValidation.valid) {
+        logger.warn('添加教师被阻止：电话包含非法字符', { phone });
+        return res.status(400).json({ error: '电话包含非法字符' });
+      }
+    }
+
+    if (email) {
+      const emailValidation = validateInput(email, { maxLength: 100 });
+      if (!emailValidation.valid) {
+        logger.warn('添加教师被阻止：邮箱包含非法字符', { email });
+        return res.status(400).json({ error: '邮箱包含非法字符' });
+      }
     }
     
     const result = db.prepare(

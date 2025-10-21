@@ -14,15 +14,18 @@ import {
   Home20Regular,
   PersonBoard20Regular,
   Settings20Regular,
+  ArrowUpload20Regular,
+  ClockRegular,
 } from '@fluentui/react-icons';
 import { useAuth } from '../contexts/AuthContext';
 import HomePage from './HomePage';
-import StudentsPage from './StudentsPage';
-import TeachersPage from './TeachersPage';
+import StudentsPageComplete from './StudentsPageComplete';
+import TeachersPageComplete from './TeachersPageComplete';
 import ScoresPageEnhanced from './ScoresPageEnhanced';
-import ImportExportPageEnhanced from './ImportExportPageEnhanced';
+import DataImportPage from './DataImportPage';
 import BackupPage from './BackupPage';
 import SettingsPage from './SettingsPage';
+import PendingRecordsPage from './PendingRecordsPage';
 
 const useStyles = makeStyles({
   container: {
@@ -82,6 +85,8 @@ const DashboardPage: React.FC = () => {
     { path: '/students', label: '学生管理', icon: <People20Regular /> },
     { path: '/teachers', label: '教师管理', icon: <PersonBoard20Regular /> },
     { path: '/scores', label: '积分管理', icon: <Trophy20Regular /> },
+    { path: '/pending', label: '待处理记录', icon: <ClockRegular /> },
+    { path: '/import', label: '数据导入', icon: <ArrowUpload20Regular /> },
     { path: '/backup', label: '备份恢复', icon: <DatabaseArrowDown20Regular /> },
     { path: '/settings', label: '系统设置', icon: <Settings20Regular /> },
   ];
@@ -121,10 +126,11 @@ const DashboardPage: React.FC = () => {
         <main className={styles.main}>
           <Routes>
             <Route path="/" element={<HomePage />} />
-            <Route path="/students" element={<StudentsPage />} />
-            <Route path="/teachers" element={<TeachersPage />} />
+            <Route path="/students" element={<StudentsPageComplete />} />
+            <Route path="/teachers" element={<TeachersPageComplete />} />
             <Route path="/scores" element={<ScoresPageEnhanced />} />
-            <Route path="/import-export" element={<ImportExportPageEnhanced />} />
+            <Route path="/pending" element={<PendingRecordsPage />} />
+            <Route path="/import" element={<DataImportPage />} />
             <Route path="/backup" element={<BackupPage />} />
             <Route path="/settings" element={<SettingsPage />} />
           </Routes>

@@ -2,7 +2,20 @@ import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import logger from '../utils/logger';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
+// JWT_SECRET 必须通过环境变量设置，不允许使用默认值
+const JWT_SECRET = process.env.JWT_SECRET;
+
+if (!JWT_SECRET) {
+  logger.error('FATAL: JWT_SECRET 环境变量未设置！');
+  throw new Error('JWT_SECRET 环境变量未设置，应用无法安全启动。请在 .env 文件中设置 JWT_SECRET');
+}
+
+if (JWT_SECRET.length < 32) {
+  logger.error('FATAL: JWT_SECRET 长度不足（当前: ' + JWT_SECRET.length + '，要求: >= 32）');
+  throw new Error('JWT_SECRET 长度必须至少 32 个字符，以确保安全性');
+}
+
+logger.info('JWT_SECRET 验证通过', { length: JWT_SECRET.length });
 
 export interface AuthRequest extends Request {
   userId?: number;
@@ -24,7 +37,7 @@ export function authenticateToken(req: Request, res: Response, next: NextFunctio
   }
 
   try {
-    const decoded = jwt.verify(token, JWT_SECRET) as { userId: number; username: string };
+    const decoded = jwt.verify(token, JWT_SECRET!) as { userId: number; username: string };
     (req as AuthRequest).userId = decoded.userId;
     (req as AuthRequest).username = decoded.username;
     next();

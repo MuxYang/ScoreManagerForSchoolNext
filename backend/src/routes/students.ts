@@ -2,6 +2,7 @@ import express, { Request, Response } from 'express';
 import db from '../models/database';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
 import logger from '../utils/logger';
+import { validateInput, sanitizeForLogging } from '../utils/inputValidation';
 
 const router = express.Router();
 
@@ -45,6 +46,34 @@ router.post('/', authenticateToken, (req: Request, res: Response) => {
 
     if (!studentId || !name || !studentClass) {
       return res.status(400).json({ error: '学号、姓名和班级是必填的' });
+    }
+
+    // 安全检查：学号、姓名、班级
+    const studentIdValidation = validateInput(studentId, { maxLength: 50 });
+    if (!studentIdValidation.valid) {
+      logger.warn('添加学生被阻止：学号包含非法字符', { 
+        studentIdHash: sanitizeForLogging(studentId, { type: 'hash' }),
+        ip: (req as any).ip
+      });
+      return res.status(400).json({ error: '学号包含非法字符' });
+    }
+
+    const nameValidation = validateInput(name, { maxLength: 50 });
+    if (!nameValidation.valid) {
+      logger.warn('添加学生被阻止：姓名包含非法字符', { 
+        nameHash: sanitizeForLogging(name, { type: 'hash' }),
+        ip: (req as any).ip
+      });
+      return res.status(400).json({ error: '姓名包含非法字符' });
+    }
+
+    const classValidation = validateInput(studentClass, { maxLength: 50 });
+    if (!classValidation.valid) {
+      logger.warn('添加学生被阻止：班级包含非法字符', { 
+        classHash: sanitizeForLogging(studentClass, { type: 'hash' }),
+        ip: (req as any).ip
+      });
+      return res.status(400).json({ error: '班级包含非法字符' });
     }
 
     const result = db.prepare(`

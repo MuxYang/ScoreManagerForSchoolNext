@@ -1,21 +1,102 @@
 import express, { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import db, { encryptPassword, decryptPassword, canCreateUser } from '../models/database';
+import rateLimit from 'express-rate-limit';
+import db, { encryptPassword, decryptPassword } from '../models/database';
 import logger from '../utils/logger';
 import { 
   encryptCookie, 
   decryptCookie, 
   validateCookie, 
-  createCookieData 
+  createCookieData,
+  extractBrowserFingerprint,
+  getCookieMaxAge,
+  SecureCookieData
 } from '../utils/cookieEncryption';
+import {
+  validateUsername,
+  validatePasswordFormat,
+  validateInput,
+  sanitizeForLogging
+} from '../utils/inputValidation';
 
 const router = express.Router();
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
-const COOKIE_MAX_AGE = 7 * 24 * 60 * 60 * 1000; // 7 天
+
+// JWT_SECRET 必须通过环境变量设置
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+  throw new Error('JWT_SECRET 环境变量未设置');
+}
+
+// 速率限制配置
+// 登录端点严格限制（防止暴力破解）
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 分钟窗口
+  max: 5, // 最多 5 次尝试
+  message: '登录尝试次数过多，请15分钟后再试',
+  standardHeaders: true, // 返回 RateLimit-* 响应头
+  legacyHeaders: false,
+  handler: (req, res) => {
+    logger.warn('登录速率限制触发', { 
+      ip: req.ip,
+      userAgent: req.headers['user-agent']
+    });
+    res.status(429).json({ 
+      error: '登录尝试次数过多，请15分钟后再试' 
+    });
+  }
+});
+
+// 密码重置端点限制
+const passwordResetLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 小时窗口
+  max: 3, // 最多 3 次尝试
+  message: '密码重置尝试次数过多，请1小时后再试',
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: (req, res) => {
+    logger.warn('密码重置速率限制触发', { ip: req.ip });
+    res.status(429).json({ 
+      error: '密码重置尝试次数过多，请1小时后再试' 
+    });
+  }
+});
+
+// 通用认证操作限制（较宽松）
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 分钟
+  max: 20, // 最多 20 次请求
+  message: '请求过于频繁，请稍后再试',
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+/**
+ * 获取验证失败的友好提示信息
+ */
+function getValidationMessage(reason: string): string {
+  switch (reason) {
+    case 'SERVER_RESTART':
+      return '服务器已重启，请重新登录';
+    case 'EXPIRED':
+      return '会话已过期（超过5分钟），请重新登录';
+    case 'FINGERPRINT_MISMATCH':
+      return '浏览器环境已变更，请重新登录';
+    case 'INVALID_TIMESTAMP':
+      return '会话时间异常，请重新登录';
+    default:
+      return '会话无效，请重新登录';
+  }
+}
 
 // 密码强度验证函数
 function validatePasswordStrength(password: string): { valid: boolean; error?: string } {
+  // 先验证密码格式（字符类型限制）
+  const formatValidation = validatePasswordFormat(password);
+  if (!formatValidation.valid) {
+    return formatValidation;
+  }
+
   // 至少8位
   if (password.length < 8) {
     return { valid: false, error: '密码长度至少为8位' };
@@ -25,7 +106,7 @@ function validatePasswordStrength(password: string): { valid: boolean; error?: s
   const hasUpperCase = /[A-Z]/.test(password);
   const hasLowerCase = /[a-z]/.test(password);
   const hasNumber = /[0-9]/.test(password);
-  const hasSymbol = /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password);
+  const hasSymbol = /[!@#$%^&*()_+\-=\[\];'\\|,.<>\/?]/.test(password);
 
   const typeCount = [hasUpperCase, hasLowerCase, hasNumber, hasSymbol].filter(Boolean).length;
 
@@ -53,13 +134,35 @@ router.post('/register', async (req: Request, res: Response) => {
   });
 });
 
-// 用户登录
-router.post('/login', async (req: Request, res: Response) => {
+// 用户登录（应用速率限制）
+router.post('/login', loginLimiter, async (req: Request, res: Response) => {
   try {
     const { username, password } = req.body;
 
     if (!username || !password) {
       return res.status(400).json({ error: '用户名和密码是必填的' });
+    }
+
+    // 验证用户名格式
+    const usernameValidation = validateUsername(username);
+    if (!usernameValidation.valid) {
+      return res.status(400).json({ error: usernameValidation.error });
+    }
+
+    // 验证密码格式
+    const passwordValidation = validatePasswordFormat(password);
+    if (!passwordValidation.valid) {
+      return res.status(400).json({ error: passwordValidation.error });
+    }
+
+    // 安全检查
+    const inputValidation = validateInput(username, { maxLength: 20 });
+    if (!inputValidation.valid) {
+      logger.warn('登录尝试被阻止：检测到恶意输入', { 
+        usernameHash: sanitizeForLogging(username, { type: 'hash' }),
+        ip: req.ip
+      });
+      return res.status(400).json({ error: '输入包含非法字符' });
     }
 
     // 查找用户
@@ -92,7 +195,7 @@ router.post('/login', async (req: Request, res: Response) => {
     // Generate JWT
     const token = jwt.sign(
       { userId: user.id, username: user.username },
-      JWT_SECRET,
+      JWT_SECRET!,
       { expiresIn: process.env.JWT_EXPIRES_IN || '24h' }
     );
 
@@ -102,18 +205,36 @@ router.post('/login', async (req: Request, res: Response) => {
 
     logger.info('User login successful', { username, userId: user.id });
 
-    // 创建加密的 Cookie 数据
-    const cookieData = createCookieData(user.username, user.password_hash);
+    // 提取浏览器指纹
+    const userAgent = req.headers['user-agent'] || '';
+    const acceptLanguage = req.headers['accept-language'];
+    const browserFingerprint = extractBrowserFingerprint(userAgent, acceptLanguage);
+    
+    logger.debug('Browser fingerprint created', { 
+      username, 
+      fingerprint: browserFingerprint,
+      userAgent: userAgent.substring(0, 50)
+    });
+
+    // 创建加密的 Cookie 数据（包含浏览器指纹和密码哈希）
+    const cookieData = createCookieData(
+      user.username, 
+      user.id, 
+      user.password_hash,  // 包含密码哈希用于数据库加密
+      browserFingerprint
+    );
     const encryptedCookie = encryptCookie(cookieData);
 
-    // 设置加密的 HTTP Cookie（7天有效期）
+    // 设置加密的 HTTP Cookie（5分钟有效期）
     res.cookie('auth_session', encryptedCookie, {
       httpOnly: true,        // 防止 XSS 攻击
       secure: false,         // 本地开发使用 HTTP，生产环境应设为 true（需要 HTTPS）
       sameSite: 'lax',       // CSRF 保护
-      maxAge: COOKIE_MAX_AGE, // 7天（毫秒）
+      maxAge: getCookieMaxAge(), // 5分钟（毫秒）
       path: '/'
     });
+    
+    logger.debug('Auth cookie set', { username, expiresIn: '5 minutes' });
 
     // 同时在响应体中返回 token（兼容现有实现）
     return res.json({ 
@@ -151,13 +272,19 @@ router.post('/security-question', (req: Request, res: Response) => {
   }
 });
 
-// 重置密码
-router.post('/reset-password', async (req: Request, res: Response) => {
+// 重置密码（应用速率限制）
+router.post('/reset-password', passwordResetLimiter, async (req: Request, res: Response) => {
   try {
     const { username, securityAnswer, newPassword, newSecurityQuestion } = req.body;
 
     if (!username || !securityAnswer || !newPassword || !newSecurityQuestion) {
       return res.status(400).json({ error: '所有字段都是必填的' });
+    }
+
+    // 验证新密码格式
+    const passwordFormatValidation = validatePasswordFormat(newPassword);
+    if (!passwordFormatValidation.valid) {
+      return res.status(400).json({ error: passwordFormatValidation.error });
     }
 
     // 验证新密码强度
@@ -198,13 +325,19 @@ router.post('/reset-password', async (req: Request, res: Response) => {
   }
 });
 
-// 修改密码（需要登录）
-router.post('/change-password', async (req: Request, res: Response) => {
+// 修改密码（需要登录，应用速率限制）
+router.post('/change-password', authLimiter, async (req: Request, res: Response) => {
   try {
     const { userId, oldPassword, newPassword } = req.body;
 
     if (!userId || !oldPassword || !newPassword) {
       return res.status(400).json({ error: '所有字段都是必填的' });
+    }
+
+    // 验证新密码格式
+    const passwordFormatValidation = validatePasswordFormat(newPassword);
+    if (!passwordFormatValidation.valid) {
+      return res.status(400).json({ error: passwordFormatValidation.error });
     }
 
     // 验证新密码强度
@@ -267,29 +400,47 @@ router.post('/verify-cookie', async (req: Request, res: Response) => {
     const { encryptedCookie } = req.body;
 
     if (!encryptedCookie) {
-      return res.status(400).json({ error: '未提供 Cookie 数据' });
+      logger.debug('Auto-login failed: no cookie provided');
+      return res.status(400).json({ error: '未提供 Cookie 数据', code: 'NO_COOKIE' });
     }
 
     // 解密 Cookie
     const cookieData = decryptCookie(encryptedCookie);
     if (!cookieData) {
-      return res.status(401).json({ error: 'Cookie 解密失败或已损坏' });
+      logger.warn('Auto-login failed: cookie decryption failed');
+      return res.status(401).json({ error: 'Cookie 解密失败或已损坏', code: 'DECRYPT_FAILED' });
     }
 
-    // 验证 Cookie 有效性（检查 sessionId 和时间戳）
-    if (!validateCookie(cookieData, COOKIE_MAX_AGE)) {
-      return res.status(401).json({ error: 'Cookie 已过期或无效（服务器可能已重启）' });
+    // 提取当前请求的浏览器指纹
+    const userAgent = req.headers['user-agent'] || '';
+    const acceptLanguage = req.headers['accept-language'];
+    const currentFingerprint = extractBrowserFingerprint(userAgent, acceptLanguage);
+
+    // 验证 Cookie 有效性（检查 sessionId、时间戳、浏览器指纹）
+    const validation = validateCookie(cookieData, currentFingerprint);
+    if (!validation.valid) {
+      logger.info('Auto-login failed: cookie validation failed', {
+        reason: validation.reason,
+        username: cookieData.username,
+        age: Math.floor((Date.now() - cookieData.timestamp) / 1000)
+      });
+      return res.status(401).json({ 
+        error: '会话已过期或无效',
+        code: validation.reason,
+        message: getValidationMessage(validation.reason!)
+      });
     }
 
     // 查找用户
-    const user = db.prepare('SELECT * FROM users WHERE username = ?').get(cookieData.username) as any;
+    const user = db.prepare('SELECT * FROM users WHERE id = ? AND username = ?')
+      .get(cookieData.userId, cookieData.username) as any;
+      
     if (!user) {
-      return res.status(401).json({ error: '用户不存在' });
-    }
-
-    // 验证密码 hash 是否匹配
-    if (user.password_hash !== cookieData.passwordHash) {
-      return res.status(401).json({ error: '密码已更改，请重新登录' });
+      logger.warn('Auto-login failed: user not found', { 
+        userId: cookieData.userId, 
+        username: cookieData.username 
+      });
+      return res.status(401).json({ error: '用户不存在', code: 'USER_NOT_FOUND' });
     }
 
     // 检查是否需要修改密码
@@ -298,19 +449,42 @@ router.post('/verify-cookie', async (req: Request, res: Response) => {
     // 生成新的 JWT token
     const token = jwt.sign(
       { userId: user.id, username: user.username },
-      JWT_SECRET,
+      JWT_SECRET!,
       { expiresIn: process.env.JWT_EXPIRES_IN || '24h' }
     );
+
+    // 创建新的 Cookie（更新时间戳）
+    const newCookieData = createCookieData(
+      user.username, 
+      user.id, 
+      user.password_hash,  // 保持密码哈希
+      currentFingerprint
+    );
+    const newEncryptedCookie = encryptCookie(newCookieData);
+
+    // 设置新的 Cookie
+    res.cookie('auth_session', newEncryptedCookie, {
+      httpOnly: true,
+      secure: false,
+      sameSite: 'lax',
+      maxAge: getCookieMaxAge(),
+      path: '/'
+    });
 
     // 记录日志
     db.prepare('INSERT INTO logs (user_id, action, ip_address) VALUES (?, ?, ?)')
       .run(user.id, 'AUTO_LOGIN', req.ip);
 
-    logger.info('Cookie auto-login successful', { username: user.username, userId: user.id });
+    logger.info('Cookie auto-login successful', { 
+      username: user.username, 
+      userId: user.id,
+      newCookieExpiry: new Date(Date.now() + getCookieMaxAge()).toISOString()
+    });
 
-    // 返回用户信息和新 token
+    // 返回用户信息和新 token、新 cookie
     return res.json({
       token,
+      encryptedCookie: newEncryptedCookie, // 返回新的 cookie 供前端更新
       user: {
         id: user.id,
         username: user.username,
@@ -330,6 +504,12 @@ router.post('/first-login-setup', async (req: Request, res: Response) => {
 
     if (!userId || !newPassword || !securityQuestion || !securityAnswer) {
       return res.status(400).json({ error: '所有字段都是必填的' });
+    }
+
+    // 验证新密码格式
+    const passwordFormatValidation = validatePasswordFormat(newPassword);
+    if (!passwordFormatValidation.valid) {
+      return res.status(400).json({ error: passwordFormatValidation.error });
     }
 
     // 验证新密码强度
