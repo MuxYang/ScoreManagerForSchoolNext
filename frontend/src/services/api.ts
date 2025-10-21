@@ -102,6 +102,13 @@ export const scoreAPI = {
   update: (id: number, data: any) => apiClient.put(`/scores/${id}`, data),
   delete: (id: number) => apiClient.delete(`/scores/${id}`),
   batchImport: (scores: any[]) => apiClient.post('/scores/batch', { scores }),
+  aiImport: (records: any[]) => apiClient.post('/scores/ai-import', { records }),
+  getPending: (params?: { status?: string; limit?: number; offset?: number }) => 
+    apiClient.get('/scores/pending', { params }),
+  resolvePending: (id: number, studentId: number) => 
+    apiClient.post(`/scores/pending/${id}/resolve`, { studentId }),
+  rejectPending: (id: number) => 
+    apiClient.post(`/scores/pending/${id}/reject`),
 };
 
 // 备份 API

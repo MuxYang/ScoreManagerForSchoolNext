@@ -97,6 +97,7 @@ const PendingRecordsPage: React.FC = () => {
   const [selectedRecords, setSelectedRecords] = useState<Set<number>>(new Set());
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [loading, setLoading] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editingRecord, setEditingRecord] = useState<PendingRecord | null>(null);
   const [editForm, setEditForm] = useState({
@@ -110,25 +111,24 @@ const PendingRecordsPage: React.FC = () => {
     points: 2,
   });
 
-  // 从 localStorage 加载待处理记录
-  useEffect(() => {
-    const loadPendingRecords = () => {
-      try {
-        const stored = localStorage.getItem('pendingRecords');
-        if (stored) {
-          const records = JSON.parse(stored);
-          // 为每条记录添加唯一 ID
-          const recordsWithIds = records.map((r: any, index: number) => ({
-            ...r,
-            id: r.id || index,
-          }));
-          setPendingRecords(recordsWithIds);
-        }
-      } catch (err) {
-        console.error('加载待处理记录失败:', err);
-      }
-    };
+  // 从后端 API 加载待处理记录
+  const loadPendingRecords = async () => {
+    try {
+      setLoading(true);
+      const response = await scoreAPI.getPending();
+      const records = response.data.records || [];
+      setPendingRecords(records);
+      setLoading(false);
+    } catch (err) {
+      console.error('加载待处理记录失败:', err);
+      setError('加载待处理记录失败');
+      setTimeout(() => setError(''), 3000);
+      setLoading(false);
+    }
+  };
 
+  // 初始加载待处理记录
+  useEffect(() => {
     loadPendingRecords();
   }, []);
 
@@ -145,12 +145,6 @@ const PendingRecordsPage: React.FC = () => {
 
     fetchStudents();
   }, []);
-
-  // 保存待处理记录到 localStorage
-  const savePendingRecords = (records: PendingRecord[]) => {
-    localStorage.setItem('pendingRecords', JSON.stringify(records));
-    setPendingRecords(records);
-  };
 
   // 选择/取消选择记录
   const toggleSelection = (id: number) => {
@@ -195,8 +189,8 @@ const PendingRecordsPage: React.FC = () => {
     setEditDialogOpen(true);
   };
 
-  // 保存编辑
-  const handleSaveEdit = () => {
+  // 保存编辑（直接处理并添加到scores表）
+  const handleSaveEdit = async () => {
     if (!editForm.studentName.trim()) {
       setError('请输入学生姓名');
       return;
@@ -214,26 +208,20 @@ const PendingRecordsPage: React.FC = () => {
       return;
     }
 
-    // 更新记录
-    const updatedRecords = pendingRecords.map(r => 
-      r.id === editingRecord?.id 
-        ? {
-            ...r,
-            studentName: editForm.studentName,
-            class: matchedStudent.class,
-            reason: editForm.reason,
-            teacherName: editForm.teacherName,
-            subject: editForm.subject,
-            others: editForm.others,
-            points: editForm.points,
-          }
-        : r
-    );
-
-    savePendingRecords(updatedRecords);
-    setEditDialogOpen(false);
-    setSuccess('记录已更新');
-    setTimeout(() => setSuccess(''), 3000);
+    try {
+      // 调用后端 resolve API
+      await scoreAPI.resolvePending(editingRecord!.id!, matchedStudent.id);
+      
+      setEditDialogOpen(false);
+      setSuccess('记录已处理并添加到扣分记录');
+      setTimeout(() => setSuccess(''), 3000);
+      
+      // 重新加载待处理记录列表
+      await loadPendingRecords();
+    } catch (err: any) {
+      setError(err.response?.data?.error || '处理记录失败');
+      setTimeout(() => setError(''), 3000);
+    }
   };
 
   // 批量添加到数据库
@@ -272,14 +260,7 @@ const PendingRecordsPage: React.FC = () => {
         }
 
         try {
-          await scoreAPI.create({
-            student_id: matchedStudent.student_id,
-            points: record.points || 2,
-            reason: record.reason,
-            teacher_name: record.teacherName,
-            subject: record.subject || '',
-            others: record.others || '',
-          });
+          await scoreAPI.resolvePending(record.id!, matchedStudent.id);
           successCount++;
         } catch (err) {
           failCount++;
@@ -287,9 +268,8 @@ const PendingRecordsPage: React.FC = () => {
         }
       }
 
-      // 移除成功添加的记录
-      const remainingRecords = pendingRecords.filter(r => !selectedRecords.has(r.id!));
-      savePendingRecords(remainingRecords);
+      // 重新加载待处理记录列表
+      await loadPendingRecords();
       setSelectedRecords(new Set());
 
       if (failCount === 0) {
@@ -305,18 +285,30 @@ const PendingRecordsPage: React.FC = () => {
   };
 
   // 批量舍弃
-  const handleBatchDiscard = () => {
+  const handleBatchDiscard = async () => {
     if (selectedRecords.size === 0) {
       setError('请至少选择一条记录');
       setTimeout(() => setError(''), 3000);
       return;
     }
 
-    const remainingRecords = pendingRecords.filter(r => !selectedRecords.has(r.id!));
-    savePendingRecords(remainingRecords);
-    setSelectedRecords(new Set());
-    setSuccess(`已舍弃 ${selectedRecords.size} 条记录`);
-    setTimeout(() => setSuccess(''), 3000);
+    try {
+      const rejectPromises = Array.from(selectedRecords).map(id => 
+        scoreAPI.rejectPending(id)
+      );
+      
+      await Promise.all(rejectPromises);
+      
+      // 重新加载待处理记录列表
+      await loadPendingRecords();
+      setSelectedRecords(new Set());
+      
+      setSuccess(`已舍弃 ${selectedRecords.size} 条记录`);
+      setTimeout(() => setSuccess(''), 3000);
+    } catch (err: any) {
+      setError(err.response?.data?.error || '批量舍弃失败');
+      setTimeout(() => setError(''), 3000);
+    }
   };
 
   // 自动匹配学生

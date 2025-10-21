@@ -579,48 +579,39 @@ const ScoresPageEnhanced: React.FC = () => {
       return;
     }
 
-    // 检查所有数据是否都匹配到学生
-    const unmatchedData = parsedData.filter(item => !item.matchedStudent);
-    if (unmatchedData.length > 0) {
-      if (!confirm(`有 ${unmatchedData.length} 条数据未匹配到学生，确定继续导入吗？`)) {
-        return;
-      }
-    }
-
     setAiImporting(true);
     setError('');
 
     try {
-      let successCount = 0;
-      let failCount = 0;
+      // 将解析的数据转换为后端期望的格式
+      const records = parsedData.map(item => ({
+        name: item.studentName,
+        className: item.class,
+        teacherName: item.teacherName,
+        points: item.points,
+        reason: item.reason,
+        date: new Date().toISOString().split('T')[0],
+      }));
 
-      for (const item of parsedData) {
-        if (!item.matchedStudent) {
-          failCount++;
-          continue;
-        }
-
-        try {
-          await scoreAPI.create({
-            studentId: item.matchedStudent.id,
-            points: item.points,
-            reason: item.reason,
-            teacherName: item.teacherName,
-            date: new Date().toISOString().split('T')[0],
-          });
-          successCount++;
-        } catch {
-          failCount++;
-        }
+      // 调用后端 AI 导入 API（会自动匹配学生，未匹配的进入待处理）
+      const response = await scoreAPI.aiImport(records);
+      
+      const { successCount, pendingCount, errorCount } = response.data;
+      
+      if (pendingCount > 0) {
+        setSuccess(
+          `导入完成！\n✓ 成功导入 ${successCount} 条\n⏳ ${pendingCount} 条进入待处理\n✗ ${errorCount} 条失败\n\n请前往"待处理记录"页面手动处理未匹配的记录。`
+        );
+      } else {
+        setSuccess(`导入完成：成功 ${successCount} 条，失败 ${errorCount} 条`);
       }
-
-      setSuccess(`导入完成：成功 ${successCount} 条，失败 ${failCount} 条`);
+      
       setAiDialogOpen(false);
       setParsedData([]);
       setAiText('');
       loadScores();
     } catch (err: any) {
-      setError(err.response?.data?.error || '批量导入失败');
+      setError(err.response?.data?.error || 'AI导入失败');
     } finally {
       setAiImporting(false);
     }

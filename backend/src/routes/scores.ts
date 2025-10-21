@@ -334,9 +334,17 @@ router.get('/pending', authenticateToken, (req: Request, res: Response) => {
 
     const records = db.prepare(query).all(status, Number(limit), Number(offset));
     
-    // 解析 JSON 字段
+    // 解析 JSON 字段并转换字段名为前端期望的格式
     const parsedRecords = records.map((record: any) => ({
-      ...record,
+      id: record.id,
+      studentName: record.student_name,
+      class: record.class_name,
+      teacherName: record.teacher_name,
+      points: record.points,
+      reason: record.reason,
+      date: record.date,
+      status: record.status,
+      createdAt: record.created_at,
       rawData: record.raw_data ? JSON.parse(record.raw_data) : null,
       matchSuggestions: record.match_suggestions ? JSON.parse(record.match_suggestions) : []
     }));
@@ -375,16 +383,16 @@ router.post('/pending/:id/resolve', authenticateToken, (req: Request, res: Respo
     }
 
     // 验证学生存在
-    const student = db.prepare('SELECT id FROM students WHERE id = ?').get(studentId);
+    const student = db.prepare('SELECT id, student_id, name, class FROM students WHERE id = ?').get(studentId) as any;
     if (!student) {
       return res.status(400).json({ error: '学生不存在' });
     }
 
     // 创建扣分记录
-    db.prepare(`
+    const scoreResult = db.prepare(`
       INSERT INTO scores (student_id, points, reason, teacher_name, date)
       VALUES (?, ?, ?, ?, ?)
-    `).run(studentId, pending.points, pending.reason, pending.teacher_name, pending.date);
+    `).run(student.id, pending.points, pending.reason, pending.teacher_name, pending.date);
 
     // 更新待处理记录状态
     db.prepare(`
@@ -397,9 +405,15 @@ router.post('/pending/:id/resolve', authenticateToken, (req: Request, res: Respo
     db.prepare('INSERT INTO logs (user_id, action, details) VALUES (?, ?, ?)')
       .run(authReq.userId, 'RESOLVE_PENDING_SCORE', JSON.stringify({ pendingId, studentId }));
 
-    logger.info('处理待处理记录成功', { pendingId, studentId });
+    logger.info('处理待处理记录成功', { pendingId, studentId, studentName: student.name });
 
-    res.json({ success: true, message: '记录已处理' });
+    res.json({ 
+      success: true, 
+      message: '记录已处理',
+      scoreId: scoreResult.lastInsertRowid,
+      studentName: student.name,
+      studentClass: student.class
+    });
   } catch (error) {
     logger.error('处理待处理记录失败:', error);
     res.status(500).json({ error: '处理待处理记录失败' });
