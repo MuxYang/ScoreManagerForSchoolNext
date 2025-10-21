@@ -117,6 +117,11 @@ const PendingRecordsPage: React.FC = () => {
       setLoading(true);
       const response = await scoreAPI.getPending();
       const records = response.data.records || [];
+      console.log('📋 加载待处理记录:', {
+        total: records.length,
+        sample: records[0],
+        allIds: records.map((r: any) => ({ id: r.id, name: r.studentName }))
+      });
       setPendingRecords(records);
       setLoading(false);
     } catch (err) {
