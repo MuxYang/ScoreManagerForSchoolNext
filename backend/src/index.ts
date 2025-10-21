@@ -4,6 +4,14 @@ import helmet from 'helmet';
 import dotenv from 'dotenv';
 import rateLimit from 'express-rate-limit';
 import cookieParser from 'cookie-parser';
+import { ensureEnvFile } from './utils/envGenerator';
+
+// 首次运行时自动生成 .env 文件（必须在 dotenv.config() 之前）
+ensureEnvFile();
+
+// 加载环境变量（必须在导入路由之前，因为路由模块会使用环境变量）
+dotenv.config();
+
 import db, { initializeDatabase, createDefaultAdmin } from './models/database';
 import logger from './utils/logger';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
@@ -17,11 +25,8 @@ import scoreRoutes from './routes/scores';
 import backupRoutes from './routes/backup';
 import importExportRoutes from './routes/import-export';
 
-// 加载环境变量
-dotenv.config();
-
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = parseInt(process.env.PORT || '3000', 10);
 const HOST = process.env.HOST || '127.0.0.1';
 
 // Initialize server session ID (generates new one on each startup)

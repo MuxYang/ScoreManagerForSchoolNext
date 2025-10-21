@@ -13,7 +13,7 @@ if (!fs.existsSync(dbDir)) {
 }
 
 // 创建数据库连接
-const db = new Database(DB_PATH);
+const db: Database.Database = new Database(DB_PATH);
 
 // 启用外键约束
 db.pragma('foreign_keys = ON');

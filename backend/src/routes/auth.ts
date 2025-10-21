@@ -23,7 +23,7 @@ import {
 const router = express.Router();
 
 // JWT_SECRET 必须通过环境变量设置
-const JWT_SECRET = process.env.JWT_SECRET;
+const JWT_SECRET = process.env.JWT_SECRET as string;
 if (!JWT_SECRET) {
   throw new Error('JWT_SECRET 环境变量未设置');
 }
@@ -195,8 +195,8 @@ router.post('/login', loginLimiter, async (req: Request, res: Response) => {
     // Generate JWT
     const token = jwt.sign(
       { userId: user.id, username: user.username },
-      JWT_SECRET!,
-      { expiresIn: process.env.JWT_EXPIRES_IN || '24h' }
+      JWT_SECRET,
+      { expiresIn: process.env.JWT_EXPIRES_IN || '24h' } as jwt.SignOptions
     );
 
     // Log the action
@@ -449,8 +449,8 @@ router.post('/verify-cookie', async (req: Request, res: Response) => {
     // 生成新的 JWT token
     const token = jwt.sign(
       { userId: user.id, username: user.username },
-      JWT_SECRET!,
-      { expiresIn: process.env.JWT_EXPIRES_IN || '24h' }
+      JWT_SECRET,
+      { expiresIn: process.env.JWT_EXPIRES_IN || '24h' } as jwt.SignOptions
     );
 
     // 创建新的 Cookie（更新时间戳）
