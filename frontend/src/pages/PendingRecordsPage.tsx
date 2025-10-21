@@ -394,7 +394,7 @@ const PendingRecordsPage: React.FC = () => {
     createTableColumn<PendingRecord>({
       columnId: 'points',
       compare: (a, b) => (a.points || 0) - (b.points || 0),
-      renderHeaderCell: () => '积分',
+      renderHeaderCell: () => '扣分',
       renderCell: (item) => item.points || 2,
     }),
     createTableColumn<PendingRecord>({
@@ -573,7 +573,7 @@ const PendingRecordsPage: React.FC = () => {
                 </div>
 
                 <div>
-                  <Label>积分</Label>
+                  <Label>扣分</Label>
                   <Input
                     type="number"
                     value={String(editForm.points)}

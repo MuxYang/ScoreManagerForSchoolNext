@@ -66,7 +66,7 @@ const LoginPage: React.FC = () => {
   return (
     <div className={styles.container}>
       <Card className={styles.card}>
-        <Title1 className={styles.title}>学生积分管理系统</Title1>
+        <Title1 className={styles.title}>学生扣分管理系统</Title1>
         <Title3>登录</Title3>
         
         <form onSubmit={handleSubmit} className={styles.form}>

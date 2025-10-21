@@ -1,7 +1,7 @@
 {
   "name": "score-manager-backend",
   "version": "1.0.0-beta2",
-  "description": "学生积分管理系统后端服务",
+  "description": "学生扣分管理系统后端服务",
   "main": "dist/index.js",
   "scripts": {
     "dev": "tsx watch src/index.ts",

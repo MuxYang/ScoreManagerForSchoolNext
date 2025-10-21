@@ -1,7 +1,7 @@
 {
   "name": "score-manager-workspace",
   "version": "1.0.0-beta2",
-  "description": "学生积分管理系统工作区",
+  "description": "学生扣分管理系统工作区",
   "private": true,
   "scripts": {
     "install:all": "npm --prefix backend install && npm --prefix frontend install",

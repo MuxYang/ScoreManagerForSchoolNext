@@ -198,7 +198,7 @@ const ScoresPageEnhanced: React.FC = () => {
       const response = await scoreAPI.getAll(filters);
       setScores(response.data);
     } catch (err: any) {
-      setError(err.response?.data?.error || '加载积分记录失败');
+      setError(err.response?.data?.error || '加载扣分记录失败');
     } finally {
       setLoading(false);
     }
@@ -298,7 +298,7 @@ const ScoresPageEnhanced: React.FC = () => {
       const systemPrompt = `你是一个数据解析助手，专门将自然语言文本转换为结构化的JSON数据。
 
 任务要求：
-1. 解析用户提供的文本，提取积分记录信息
+1. 解析用户提供的文本，提取扣分记录信息
 2. 每条记录应包含：studentName(学生姓名), class(班级，如无则留空), reason(原因), teacherName(教师姓名), subject(科目，如无则留空), others(其他信息，如无则留空)
 3. 仅返回JSON数组，不要包含任何其他说明文字
 4. 精确匹配用户输入的信息，others字段填写未被前面几项包含的其他信息
@@ -626,7 +626,7 @@ const ScoresPageEnhanced: React.FC = () => {
     }
   };
 
-  // 导出积分数据
+  // 导出扣分数据
   const handleExportScores = async () => {
     try {
       const response = await importExportAPI.exportScoresExcel();
@@ -636,7 +636,7 @@ const ScoresPageEnhanced: React.FC = () => {
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `积分记录_${new Date().toISOString().split('T')[0]}.xlsx`;
+      link.download = `扣分记录_${new Date().toISOString().split('T')[0]}.xlsx`;
       link.click();
       window.URL.revokeObjectURL(url);
       setSuccess('导出成功！');
@@ -694,10 +694,10 @@ const ScoresPageEnhanced: React.FC = () => {
     try {
       if (editingScore) {
         await scoreAPI.update(editingScore.id, data);
-        setSuccess('积分记录更新成功');
+        setSuccess('扣分记录更新成功');
       } else {
         await scoreAPI.create(data);
-        setSuccess('积分记录添加成功');
+        setSuccess('扣分记录添加成功');
       }
       setDialogOpen(false);
       loadScores();
@@ -707,13 +707,13 @@ const ScoresPageEnhanced: React.FC = () => {
   };
 
   const handleDelete = async (id: number) => {
-    if (!confirm('确定要删除这条积分记录吗？')) {
+    if (!confirm('确定要删除这条扣分记录吗？')) {
       return;
     }
 
     try {
       await scoreAPI.delete(id);
-      setSuccess('积分记录删除成功');
+      setSuccess('扣分记录删除成功');
       loadScores();
     } catch (err: any) {
       setError(err.response?.data?.error || '删除失败');
@@ -792,7 +792,7 @@ const ScoresPageEnhanced: React.FC = () => {
     }),
     createTableColumn<Score>({
       columnId: 'points',
-      renderHeaderCell: () => '积分',
+      renderHeaderCell: () => '扣分',
       renderCell: (score) => score.points,
     }),
     createTableColumn<Score>({
@@ -837,7 +837,7 @@ const ScoresPageEnhanced: React.FC = () => {
   return (
     <div className={styles.container}>
       <div className={styles.header}>
-        <Title2>积分管理</Title2>
+        <Title2>扣分管理</Title2>
         <div className={styles.headerButtons}>
           <Button
             appearance="subtle"
@@ -851,7 +851,7 @@ const ScoresPageEnhanced: React.FC = () => {
             icon={<Add20Regular />}
             onClick={() => handleOpenDialog()}
           >
-            添加积分记录
+            添加扣分记录
           </Button>
           <Button
             appearance="secondary"
@@ -887,7 +887,7 @@ const ScoresPageEnhanced: React.FC = () => {
       {/* 数据录入选项卡 */}
       {selectedTab === 'entry' && (
         <div style={{ marginTop: '20px' }}>
-          <Title3>积分录入</Title3>
+          <Title3>扣分录入</Title3>
 
           {loading ? (
             <Spinner label="加载中..." />
@@ -920,7 +920,7 @@ const ScoresPageEnhanced: React.FC = () => {
       {/* 数据查询选项卡 */}
       {selectedTab === 'query' && (
         <div style={{ marginTop: '20px' }}>
-          <Title3>积分查询</Title3>
+          <Title3>扣分查询</Title3>
           
           <div className={styles.filters}>
             <div className={styles.filterItem}>
@@ -997,7 +997,7 @@ const ScoresPageEnhanced: React.FC = () => {
       {/* 数据统计选项卡 */}
       {selectedTab === 'statistics' && (
         <div style={{ marginTop: '20px' }}>
-          <Title3>积分统计</Title3>
+          <Title3>扣分统计</Title3>
           
           <div style={{ marginTop: '20px', marginBottom: '20px' }}>
             <Label required>选择学生</Label>
@@ -1040,26 +1040,26 @@ const ScoresPageEnhanced: React.FC = () => {
               </Card>
               <Card className={styles.statsCard}>
                 <Title2>{statistics.total_points}</Title2>
-                <div>累计积分</div>
+                <div>累计扣分</div>
               </Card>
               <Card className={styles.statsCard}>
                 <Title2>{statistics.average_points.toFixed(2)}</Title2>
-                <div>平均积分</div>
+                <div>平均扣分</div>
               </Card>
               <Card className={styles.statsCard}>
                 <Title2>{statistics.max_points}</Title2>
-                <div>最高积分</div>
+                <div>最高扣分</div>
               </Card>
               <Card className={styles.statsCard}>
                 <Title2>{statistics.min_points}</Title2>
-                <div>最低积分</div>
+                <div>最低扣分</div>
               </Card>
             </div>
           )}
 
           {!statistics && selectedStudentForStats && (
             <div style={{ textAlign: 'center', padding: '40px', color: '#666' }}>
-              该学生暂无积分记录
+              该学生暂无扣分记录
             </div>
           )}
 
@@ -1075,7 +1075,7 @@ const ScoresPageEnhanced: React.FC = () => {
       <Dialog open={dialogOpen} onOpenChange={(_, data) => setDialogOpen(data.open)}>
         <DialogSurface>
           <DialogBody>
-            <DialogTitle>{editingScore ? '编辑积分记录' : '添加积分记录'}</DialogTitle>
+            <DialogTitle>{editingScore ? '编辑扣分记录' : '添加扣分记录'}</DialogTitle>
             <DialogContent>
               <div className={styles.form}>
                 <div>
@@ -1118,7 +1118,7 @@ const ScoresPageEnhanced: React.FC = () => {
                 </div>
 
                 <div>
-                  <Label required>积分</Label>
+                  <Label required>扣分</Label>
                   <Input
                     type="number"
                     value={formData.points}
@@ -1133,7 +1133,7 @@ const ScoresPageEnhanced: React.FC = () => {
                   <Input
                     value={formData.reason}
                     onChange={(e) => setFormData({ ...formData, reason: e.target.value })}
-                    placeholder="请输入积分事由"
+                    placeholder="请输入扣分事由"
                     required
                   />
                 </div>
@@ -1187,7 +1187,7 @@ const ScoresPageEnhanced: React.FC = () => {
             <DialogContent style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               {/* 文本输入区 - 更大 */}
               <div>
-                <Label weight="semibold" size="large">粘贴包含积分信息的文本</Label>
+                <Label weight="semibold" size="large">粘贴包含扣分信息的文本</Label>
                 <Textarea
                   ref={aiTextAreaRef}
                   resize="vertical"
@@ -1203,7 +1203,7 @@ const ScoresPageEnhanced: React.FC = () => {
                   }}
                   value={aiText}
                   onChange={(e) => setAiText(e.target.value)}
-                  placeholder="示例格式：&#10;张三 高一(1)班 课堂表现优秀 +5分 李老师&#10;李四 20240002 高一(2)班 作业认真 +3分 王老师&#10;王五 迟到 -2分&#10;&#10;支持多种格式，AI 会智能识别学生姓名、班级、积分、事由等信息"
+                  placeholder="示例格式：&#10;张三 高一(1)班 课堂表现优秀 +5分 李老师&#10;李四 20240002 高一(2)班 作业认真 +3分 王老师&#10;王五 迟到 -2分&#10;&#10;支持多种格式，AI 会智能识别学生姓名、班级、扣分、事由等信息"
                   disabled={aiParsing}
                 />
               </div>
@@ -1247,7 +1247,7 @@ const ScoresPageEnhanced: React.FC = () => {
                           <th style={{ padding: '8px', textAlign: 'left', borderBottom: '2px solid #ccc' }}>学生</th>
                           <th style={{ padding: '8px', textAlign: 'left', borderBottom: '2px solid #ccc' }}>学号</th>
                           <th style={{ padding: '8px', textAlign: 'left', borderBottom: '2px solid #ccc' }}>班级</th>
-                          <th style={{ padding: '8px', textAlign: 'left', borderBottom: '2px solid #ccc' }}>积分</th>
+                          <th style={{ padding: '8px', textAlign: 'left', borderBottom: '2px solid #ccc' }}>扣分</th>
                           <th style={{ padding: '8px', textAlign: 'left', borderBottom: '2px solid #ccc' }}>事由</th>
                           <th style={{ padding: '8px', textAlign: 'left', borderBottom: '2px solid #ccc' }}>教师</th>
                           <th style={{ padding: '8px', textAlign: 'center', borderBottom: '2px solid #ccc' }}>状态</th>

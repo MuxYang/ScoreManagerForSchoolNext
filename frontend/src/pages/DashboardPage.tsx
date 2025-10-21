@@ -84,7 +84,7 @@ const DashboardPage: React.FC = () => {
     { path: '/', label: '首页', icon: <Home20Regular /> },
     { path: '/students', label: '学生管理', icon: <People20Regular /> },
     { path: '/teachers', label: '教师管理', icon: <PersonBoard20Regular /> },
-    { path: '/scores', label: '积分管理', icon: <Trophy20Regular /> },
+    { path: '/scores', label: '扣分管理', icon: <Trophy20Regular /> },
     { path: '/pending', label: '待处理记录', icon: <ClockRegular /> },
     { path: '/import', label: '数据导入', icon: <ArrowUpload20Regular /> },
     { path: '/backup', label: '备份恢复', icon: <DatabaseArrowDown20Regular /> },
@@ -94,7 +94,7 @@ const DashboardPage: React.FC = () => {
   return (
     <div className={styles.container}>
       <header className={styles.header}>
-        <Title2>学生积分管理系统</Title2>
+        <Title2>学生扣分管理系统</Title2>
         <div className={styles.nav}>
           <Body1>欢迎，{user?.username}</Body1>
           <Button appearance="subtle" onClick={logout}>

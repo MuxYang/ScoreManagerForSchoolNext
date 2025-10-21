@@ -1,6 +1,6 @@
-# 学生积分管理系统
+# 学生扣分管理系统
 
-基于 Web 的学生积分管理系统，使用 TypeScript、React、Express 和 SQLite 构建。
+基于 Web 的学生扣分管理系统，使用 TypeScript、React、Express 和 SQLite 构建。
 
 ## 功能特性
 
