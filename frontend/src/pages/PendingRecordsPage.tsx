@@ -120,7 +120,7 @@ const PendingRecordsPage: React.FC = () => {
       console.log('📋 加载待处理记录:', {
         total: records.length,
         sample: records[0],
-        allIds: records.map((r: any) => ({ id: r.id, name: r.studentName }))
+        allIds: records.map((r: any) => ({ id: r.id, name: r.studentName || '(未填写)' }))
       });
       setPendingRecords(records);
       setLoading(false);
@@ -214,6 +214,13 @@ const PendingRecordsPage: React.FC = () => {
     }
 
     try {
+      // 如果有班级和科目但没有教师，提示用户
+      if (editForm.class && editForm.subject && !editForm.teacherName.trim()) {
+        if (!confirm('未填写教师姓名，系统将尝试根据班级和科目自动匹配教师，是否继续？')) {
+          return;
+        }
+      }
+
       // 调用后端 resolve API
       await scoreAPI.resolvePending(editingRecord!.id!, matchedStudent.id);
       

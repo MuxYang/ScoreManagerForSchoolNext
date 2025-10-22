@@ -83,7 +83,7 @@ export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       document.body.style.backgroundColor = '#1a1a1a';
       document.body.style.color = '#ffffff';
     } else {
-      document.body.style.backgroundColor = '#ffffff';
+      document.body.style.backgroundColor = webLightTheme.colorNeutralBackground1;
       document.body.style.color = '#000000';
     }
   }, [theme]);

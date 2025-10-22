@@ -13,10 +13,10 @@
     "@fluentui/react-icons": "^2.0.228",
     "@types/node": "^24.8.1",
     "axios": "^1.6.5",
+    "exceljs": "^4.4.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "react-router-dom": "^6.21.1",
-    "xlsx": "^0.18.5"
+    "react-router-dom": "^6.21.1"
   },
   "devDependencies": {
     "@types/react": "^18.2.47",

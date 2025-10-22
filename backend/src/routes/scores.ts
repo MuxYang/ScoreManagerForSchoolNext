@@ -3,17 +3,21 @@ import db from '../models/database';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
 import logger from '../utils/logger';
 import { validateInput } from '../utils/inputValidation';
-import { matchStudentForAIImport, normalizeClassName } from '../utils/pinyinMatcher';
+import { matchStudentForAIImport, normalizeClassName, matchTeacherAndSubject } from '../utils/pinyinMatcher';
 
 const router = express.Router();
 
 // 获取所有积分记录
 router.get('/', authenticateToken, (req: Request, res: Response) => {
   try {
-    const { studentId, startDate, endDate, limit = 100, offset = 0 } = req.query;
+    const { studentId, teacherName, startDate, endDate, limit = 100, offset = 0 } = req.query;
 
     let query = `
-      SELECT s.*, st.student_id, st.name, st.class 
+      SELECT 
+        s.*, 
+        st.student_id AS student_number,
+        st.name AS student_name,
+        st.class 
       FROM scores s
       JOIN students st ON s.student_id = st.id
       WHERE 1=1
@@ -23,6 +27,11 @@ router.get('/', authenticateToken, (req: Request, res: Response) => {
     if (studentId) {
       query += ' AND s.student_id = ?';
       params.push(studentId);
+    }
+
+    if (teacherName) {
+      query += ' AND s.teacher_name = ?';
+      params.push(teacherName);
     }
 
     if (startDate) {
@@ -70,10 +79,72 @@ router.get('/statistics/:studentId', authenticateToken, (req: Request, res: Resp
 // 添加积分记录
 router.post('/', authenticateToken, (req: Request, res: Response) => {
   try {
-    const { studentId, points, reason, teacherName, date } = req.body;
+    let { studentId, points, reason, teacherName, date } = req.body as any;
 
-    if (!studentId || points === undefined) {
-      return res.status(400).json({ error: '学生ID和积分是必填的' });
+    // 记录关键入参（避免泄漏敏感信息）
+    logger.warn('POST /scores 收到请求', {
+      hasStudentId: !!studentId,
+      hasStudentName: !!(req.body?.studentName || req.body?.name),
+      hasClass: !!(req.body?.class || req.body?.className),
+      hasPoints: points !== undefined && points !== null,
+    });
+
+    // 兼容旧/错误调用：如果没有提供 studentId，但提供了 studentName/class，则尝试根据姓名(+班级)匹配学生
+    if ((!studentId || Number.isNaN(Number(studentId))) && (req.body.studentName || req.body.name)) {
+      const rawName = (req.body.studentName || req.body.name || '').trim();
+      const rawClass = (req.body.class || req.body.className || '').trim();
+      try {
+        let matchedStudent: any | null = null;
+
+        if (rawName) {
+          if (rawClass) {
+            // 优先按 姓名 + 班级 精确匹配
+            matchedStudent = db.prepare('SELECT id, name, class FROM students WHERE name = ? AND class = ?').get(rawName, rawClass);
+            if (!matchedStudent) {
+              // 班级可能存在格式差异，尝试归一化后匹配
+              const normalized = normalizeClassName(rawClass);
+              matchedStudent = db.prepare('SELECT id, name, class FROM students WHERE name = ? AND class = ?').get(rawName, normalized);
+
+              // 仍未匹配：在同名学生中按归一化班级筛选
+              if (!matchedStudent) {
+                const sameNameList = db.prepare('SELECT id, name, class FROM students WHERE name = ?').all(rawName) as any[];
+                const filteredByNormalizedClass = sameNameList.filter(s => normalizeClassName(s.class) === normalized);
+                if (filteredByNormalizedClass.length === 1) {
+                  matchedStudent = filteredByNormalizedClass[0];
+                }
+              }
+            }
+          }
+
+          // 仍未匹配，退化为仅按姓名（若唯一）
+          if (!matchedStudent) {
+            const sameNameList = db.prepare('SELECT id, name, class FROM students WHERE name = ?').all(rawName) as any[];
+            if (sameNameList.length === 1) {
+              matchedStudent = sameNameList[0];
+            } else if (sameNameList.length > 1) {
+              logger.warn('POST /scores 兼容分支：同名学生不唯一，需提供学号或班级', { name: rawName, count: sameNameList.length });
+              return res.status(400).json({ error: '存在同名学生，请提供学号或班级以唯一确定学生' });
+            }
+          }
+        }
+
+        if (matchedStudent) {
+          studentId = matchedStudent.id;
+          logger.warn('POST /scores 兼容分支：根据姓名/班级推断出 studentId，将继续写入', { name: rawName, class: rawClass, studentId });
+        }
+      } catch (e) {
+        logger.error('POST /scores 兼容匹配出错', { error: (e as Error).message });
+      }
+    }
+
+    // 兜底：如果未提供 points，则默认使用 2 分（与前端默认显示保持一致）
+    if (points === undefined || points === null || Number.isNaN(Number(points))) {
+      logger.warn('POST /scores 兼容分支：未提供 points，使用默认值 2');
+      points = 2;
+    }
+
+    if (!studentId) {
+      return res.status(400).json({ error: '学生ID是必填的' });
     }
 
     // 安全检查
@@ -102,7 +173,7 @@ router.post('/', authenticateToken, (req: Request, res: Response) => {
     db.prepare('INSERT INTO logs (user_id, action, details) VALUES (?, ?, ?)')
       .run(authReq.userId, 'ADD_SCORE', JSON.stringify({ studentId, points, reason }));
 
-    logger.info('添加积分记录成功', { studentId, points });
+  logger.info('添加积分记录成功', { studentId, points });
 
     res.status(201).json({ 
       id: result.lastInsertRowid,
@@ -206,6 +277,7 @@ router.post('/batch', authenticateToken, (req: Request, res: Response) => {
 });
 
 // AI批量导入扣分记录（智能匹配，未匹配的进入待处理）
+// 扣分数据从数据库读取（默认2分），前端只需传递学生信息
 router.post('/ai-import', authenticateToken, (req: Request, res: Response) => {
   try {
     const { records } = req.body;
@@ -226,18 +298,36 @@ router.post('/ai-import', authenticateToken, (req: Request, res: Response) => {
     `);
 
     const insertPending = db.prepare(`
-      INSERT INTO pending_scores (student_name, class_name, teacher_name, points, reason, date, raw_data, match_suggestions, created_by)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO pending_scores (student_name, class_name, teacher_name, subject, points, reason, others, date, raw_data, match_suggestions, created_by)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     const transaction = db.transaction((records: any[]) => {
-      for (const record of records) {
+      for (let i = 0; i < records.length; i++) {
+        const record = records[i];
         try {
-          const { name, className, teacherName, points, reason, date } = record;
+          let { name, className, teacherName, subject, others, reason, date } = record;
+          
+          // 扣分数据从数据库读取，默认2分（与前端默认值保持一致）
+          const points = record.points !== undefined && record.points !== null ? record.points : 2;
 
-          if (!name || points === undefined) {
-            errors.push(`跳过无效记录：缺少姓名或扣分`);
+          if (!name) {
+            errors.push(`记录 ${i + 1}：跳过无效记录（缺少姓名）`);
             continue;
+          }
+
+          // 🔧 新增：如果有班级和科目但没有教师，尝试自动匹配教师
+          if (className && subject && !teacherName) {
+            const teacherMatch = matchTeacherAndSubject(db, undefined, className, subject);
+            if (teacherMatch.teacher) {
+              teacherName = teacherMatch.teacher;
+              logger.info('AI导入：根据班级和科目自动匹配教师', {
+                recordIndex: i + 1,
+                className,
+                subject,
+                matchedTeacher: teacherName
+              });
+            }
           }
 
           // 使用严格匹配模式（姓名拼音+班级）
@@ -258,30 +348,60 @@ router.post('/ai-import', authenticateToken, (req: Request, res: Response) => {
               date || new Date().toISOString().split('T')[0]
             );
             successCount++;
+            logger.info('AI导入：记录成功导入', {
+              recordIndex: i + 1,
+              studentName: name,
+              className,
+              matchedStudent: matchResult.student.name
+            });
           } else {
             // 匹配失败，移入待处理
-            const normalizedClass = className ? normalizeClassName(className) : '';
-            insertPending.run(
-              name,
-              normalizedClass,
-              teacherName || '',
-              points,
-              reason || '',
-              date || new Date().toISOString().split('T')[0],
-              JSON.stringify(record),
-              JSON.stringify(matchResult.suggestions || []),
-              authReq.userId
-            );
-            pendingCount++;
-            pendingRecords.push({
-              name,
-              className: normalizedClass,
-              points,
-              suggestions: matchResult.suggestions || []
-            });
+            try {
+              const normalizedClass = className ? normalizeClassName(className) : '';
+              insertPending.run(
+                name,
+                normalizedClass,
+                teacherName || '',
+                subject || '',
+                points,
+                reason || '',
+                others || '',
+                date || new Date().toISOString().split('T')[0],
+                JSON.stringify(record),
+                JSON.stringify(matchResult.suggestions || []),
+                authReq.userId
+              );
+              pendingCount++;
+              pendingRecords.push({
+                name,
+                className: normalizedClass,
+                subject: subject || '',
+                points,
+                reason: `未匹配到学生：${name}${className ? ` (${className})` : ''}`,
+                suggestions: matchResult.suggestions || []
+              });
+              logger.info('AI导入：记录移入待处理', {
+                recordIndex: i + 1,
+                studentName: name,
+                className: normalizedClass,
+                reason: '未找到匹配的学生'
+              });
+            } catch (pendingError: any) {
+              errors.push(`记录 ${i + 1}（${name}）：添加到待处理失败 - ${pendingError.message}`);
+              logger.error('添加待处理记录失败', {
+                recordIndex: i + 1,
+                error: pendingError.message,
+                record
+              });
+            }
           }
         } catch (error: any) {
-          errors.push(`导入失败：${error.message}`);
+          errors.push(`记录 ${i + 1}（${record.name || '未知'}）：导入失败 - ${error.message}`);
+          logger.error('导入记录失败', {
+            recordIndex: i + 1,
+            error: error.message,
+            record
+          });
         }
       }
     });
@@ -340,6 +460,8 @@ router.get('/pending', authenticateToken, (req: Request, res: Response) => {
       studentName: record.student_name,
       class: record.class_name,
       teacherName: record.teacher_name,
+      subject: record.subject,
+      others: record.others,
       points: record.points,
       reason: record.reason,
       date: record.date,
@@ -393,11 +515,26 @@ router.post('/pending/:id/resolve', authenticateToken, (req: Request, res: Respo
       return res.status(400).json({ error: '学生不存在' });
     }
 
+    // 🔧 新增：如果有班级和科目但没有教师，尝试自动匹配教师
+    let teacherName = pending.teacher_name;
+    if (pending.class_name && pending.subject && !teacherName) {
+      const teacherMatch = matchTeacherAndSubject(db, undefined, pending.class_name, pending.subject);
+      if (teacherMatch.teacher) {
+        teacherName = teacherMatch.teacher;
+        logger.info('待处理记录：根据班级和科目自动匹配教师', {
+          pendingId,
+          className: pending.class_name,
+          subject: pending.subject,
+          matchedTeacher: teacherName
+        });
+      }
+    }
+
     // 创建扣分记录
     const scoreResult = db.prepare(`
       INSERT INTO scores (student_id, points, reason, teacher_name, date)
       VALUES (?, ?, ?, ?, ?)
-    `).run(student.id, pending.points, pending.reason, pending.teacher_name, pending.date);
+    `).run(student.id, pending.points, pending.reason, teacherName, pending.date);
 
     // 更新待处理记录状态
     db.prepare(`
@@ -408,16 +545,17 @@ router.post('/pending/:id/resolve', authenticateToken, (req: Request, res: Respo
 
     // 记录日志
     db.prepare('INSERT INTO logs (user_id, action, details) VALUES (?, ?, ?)')
-      .run(authReq.userId, 'RESOLVE_PENDING_SCORE', JSON.stringify({ pendingId, studentId }));
+      .run(authReq.userId, 'RESOLVE_PENDING_SCORE', JSON.stringify({ pendingId, studentId, matchedTeacher: teacherName }));
 
-    logger.info('处理待处理记录成功', { pendingId, studentId, studentName: student.name });
+    logger.info('处理待处理记录成功', { pendingId, studentId, studentName: student.name, teacherName });
 
     res.json({ 
       success: true, 
       message: '记录已处理',
       scoreId: scoreResult.lastInsertRowid,
       studentName: student.name,
-      studentClass: student.class
+      studentClass: student.class,
+      teacherName: teacherName
     });
   } catch (error) {
     logger.error('处理待处理记录失败:', error);

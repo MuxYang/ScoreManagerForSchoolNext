@@ -132,8 +132,10 @@ export function initializeDatabase() {
       student_name TEXT NOT NULL,
       class_name TEXT,
       teacher_name TEXT,
+      subject TEXT,
       points REAL NOT NULL,
       reason TEXT,
+      others TEXT,
       date DATE DEFAULT CURRENT_DATE,
       raw_data TEXT,
       match_suggestions TEXT,
@@ -146,6 +148,19 @@ export function initializeDatabase() {
       FOREIGN KEY (resolved_by) REFERENCES users(id) ON DELETE SET NULL
     )
   `);
+  
+  // 添加新字段（如果不存在）
+  try {
+    db.exec(`ALTER TABLE pending_scores ADD COLUMN subject TEXT`);
+  } catch (err) {
+    // 字段已存在，忽略错误
+  }
+  
+  try {
+    db.exec(`ALTER TABLE pending_scores ADD COLUMN others TEXT`);
+  } catch (err) {
+    // 字段已存在，忽略错误
+  }
 
   // 创建索引
   db.exec(`

@@ -338,14 +338,12 @@ const TeachersPage: React.FC = () => {
         <div>
           {groupedTeachers.map((group) => (
             <div key={group.subject} style={{ marginBottom: '24px' }}>
-              <div style={{ 
+              <Card style={{ 
                 display: 'flex', 
                 alignItems: 'center', 
                 gap: '12px',
                 marginBottom: '12px',
-                padding: '12px',
-                backgroundColor: '#f5f5f5',
-                borderRadius: '4px'
+                padding: '12px'
               }}>
                 <Title2 style={{ margin: 0 }}>{group.subject}</Title2>
                 <span style={{ 
@@ -355,10 +353,10 @@ const TeachersPage: React.FC = () => {
                 }}>
                   科目总分: {group.total_points.toFixed(1)}
                 </span>
-                <span style={{ color: '#666', fontSize: '14px' }}>
+                <span style={{ fontSize: '14px', opacity: 0.7 }}>
                   ({group.teachers.length} 位教师)
                 </span>
-              </div>
+              </Card>
               <DataGrid
                 items={group.teachers}
                 columns={columns}

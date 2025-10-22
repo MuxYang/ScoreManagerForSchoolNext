@@ -176,6 +176,77 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     
     // 重置超时计时器
     resetTimeout();
+    
+    // 登录成功后，异步检查AI模型信息（不阻塞登录流程）
+    setTimeout(() => {
+      checkAiModelAfterLogin();
+    }, 1000);
+  };
+
+  // 登录后检查AI模型信息
+  const checkAiModelAfterLogin = async () => {
+    try {
+      const aiApiUrl = localStorage.getItem('aiApiUrl');
+      const aiApiKey = localStorage.getItem('aiApiKey');
+      const aiModel = localStorage.getItem('aiModel');
+      
+      if (!aiApiUrl || !aiApiKey) {
+        // 未配置AI，不显示通知
+        return;
+      }
+      
+      // 获取可用模型列表
+      const modelsUrl = aiApiUrl.replace('/chat/completions', '/models').replace('/v1/chat/completions', '/v1/models');
+      
+      const response = await fetch(modelsUrl, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${aiApiKey}`,
+          'Content-Type': 'application/json',
+        },
+        signal: AbortSignal.timeout(5000), // 5秒超时
+      });
+      
+      if (!response.ok) {
+        throw new Error(`获取模型列表失败: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      
+      if (data.data && Array.isArray(data.data)) {
+        // 过滤非聊天模型
+        const excludePatterns = ['embedding', 'whisper', 'tts', 'dall-e', 'davinci', 'babbage', 'ada', 'curie'];
+        const models = data.data
+          .map((m: any) => m.id)
+          .filter((id: string) => {
+            const lowerId = id.toLowerCase();
+            return !excludePatterns.some(pattern => lowerId.includes(pattern));
+          });
+        
+        // 检查当前配置的模型是否在列表中
+        if (aiModel && models.includes(aiModel)) {
+          // 模型匹配，显示成功通知
+          showAiModelNotification('success', `AI 模型配置正常：${aiModel}`, 5000);
+        } else {
+          // 模型不匹配，显示警告通知
+          showAiModelNotification('warning', `警告：配置的模型 ${aiModel} 不在可用列表中`, 10000);
+        }
+      } else {
+        throw new Error('返回的数据格式不正确');
+      }
+    } catch (err: any) {
+      // 获取失败，显示错误通知
+      console.warn('检查AI模型失败:', err.message);
+      showAiModelNotification('error', 'AI 模型检查失败：' + (err.message || '无法连接到AI服务'), 10000);
+    }
+  };
+
+  // 显示AI模型通知
+  const showAiModelNotification = (type: 'success' | 'warning' | 'error', message: string, duration: number) => {
+    // 触发自定义事件，让App组件显示通知
+    window.dispatchEvent(new CustomEvent('aiModelNotification', {
+      detail: { type, message, duration }
+    }));
   };
 
   const logout = async () => {

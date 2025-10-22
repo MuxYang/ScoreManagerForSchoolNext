@@ -33,7 +33,7 @@ import {
   Option,
 } from '@fluentui/react-components';
 import { Add20Regular, Delete20Regular, Edit20Regular, Search20Regular, CloudArrowUp20Regular, ArrowDownload20Regular } from '@fluentui/react-icons';
-import { scoreAPI, studentAPI, importExportAPI } from '../services/api';
+import { scoreAPI, studentAPI, importExportAPI, userConfigAPI } from '../services/api';
 
 const useStyles = makeStyles({
   container: {
@@ -132,6 +132,8 @@ interface ParsedScoreData {
   points: number;
   reason: string;
   teacherName: string;
+  subject?: string;
+  others?: string;
   matchedStudent?: Student;
 }
 
@@ -162,6 +164,11 @@ const ScoresPageEnhanced: React.FC = () => {
   const [aiModel, setAiModel] = useState(localStorage.getItem('aiModel') || 'gpt-3.5-turbo');
   const [availableModels, setAvailableModels] = useState<string[]>([]);
   const [fetchingModels, setFetchingModels] = useState(false);
+  
+  // AI错误处理对话框状态
+  const [aiErrorDialogOpen, setAiErrorDialogOpen] = useState(false);
+  const [aiErrorText, setAiErrorText] = useState('');
+  const [aiErrorMessage, setAiErrorMessage] = useState('');
   
   // 查询过滤器
   const [filterStudentName, setFilterStudentName] = useState('');
@@ -226,6 +233,49 @@ const ScoresPageEnhanced: React.FC = () => {
     loadScores();
     loadStudents();
   }, []);
+
+  // 当 AI 导入对话框被唤起时，自动从后端 cookie 读取用户配置并应用
+  useEffect(() => {
+    const applyUserConfigFromCookie = async () => {
+      if (!aiDialogOpen) return;
+      
+      try {
+        // 先从后端cookie读取配置（优先级最高）
+        const resp = await userConfigAPI.get();
+        const cfg = resp.data?.config;
+        
+        if (cfg && typeof cfg === 'object') {
+          // 如果cookie中有配置，使用cookie的配置
+          if (cfg.apiUrl) {
+            setAiApiUrl(cfg.apiUrl);
+            localStorage.setItem('aiApiUrl', cfg.apiUrl); // 同步到localStorage
+          }
+          if (cfg.apiKey) {
+            setAiApiKey(cfg.apiKey);
+            localStorage.setItem('aiApiKey', cfg.apiKey);
+          }
+          if (cfg.model) {
+            setAiModel(cfg.model);
+            localStorage.setItem('aiModel', cfg.model);
+          }
+          
+          console.log('✅ AI配置已从Cookie自动加载', { 
+            hasApiUrl: !!cfg.apiUrl, 
+            hasApiKey: !!cfg.apiKey, 
+            model: cfg.model 
+          });
+        } else {
+          // Cookie中没有配置，使用localStorage中的配置
+          console.log('ℹ️ Cookie中无配置，使用localStorage');
+        }
+      } catch (err) {
+        // 失败则忽略，继续使用 localStorage 中的值
+        console.log('⚠️ 从Cookie读取配置失败，使用localStorage备份', err);
+      }
+    };
+    
+    applyUserConfigFromCookie();
+  }, [aiDialogOpen]);
 
   // AI 对话框打开时自动聚焦到文本输入框
   useEffect(() => {
@@ -293,17 +343,27 @@ const ScoresPageEnhanced: React.FC = () => {
     setAiStreamingText('');
     setParsedData([]);
 
+    let fullText = '';
+    let cleanedText = '';
+
     try {
       // System prompt: AI 的角色和任务说明
       const systemPrompt = `你是一个数据解析助手，专门将自然语言文本转换为结构化的JSON数据。
 
 任务要求：
 1. 解析用户提供的文本，提取扣分记录信息
-2. 每条记录应包含：studentName(学生姓名), class(班级，如无则留空), reason(原因), teacherName(教师姓名), subject(科目，如无则留空), others(其他信息，如无则留空)
+2. 每条记录应包含：studentName(学生姓名), class(班级，如无则留空), reason(原因), teacherName(教师姓名), subject(科目，**必须尽力提取**), others(其他信息，如无则留空)
 3. 仅返回JSON数组，不要包含任何其他说明文字
 4. 精确匹配用户输入的信息，others字段填写未被前面几项包含的其他信息
 5. **重要：对于只包含教师信息而没有学生信息的内容（例如只提到某个老师做了什么事，没有涉及学生），请直接过滤掉，不要包含在返回结果中**
 6. **如果记录中学生姓名缺失或无法识别，但包含其他有用信息（如班级、原因等），则studentName字段可以留空，但不要完全丢弃该记录**
+
+科目提取规则（重要）：
+- **优先级1**: 从文本中直接提取科目信息（如"数学课"、"语文老师"、"英语作业"等）
+- **优先级2**: 根据教师姓名和常见科目组合推断（如"李老师"可能是"数学"，但不确定时留空）
+- **优先级3**: 根据扣分原因推断（如"数学作业未交" → "数学"，"语文默写不合格" → "语文"）
+- 如果完全无法确定科目，则subject字段留空
+- 常见科目：语文、数学、英语、物理、化学、生物、政治、历史、地理、体育、音乐、美术、信息技术等
 
 过滤规则示例：
 - "张老师今天批改了作业" → 过滤掉（只有教师信息）
@@ -319,7 +379,8 @@ const ScoresPageEnhanced: React.FC = () => {
 
 返回格式示例：
 [{"studentName":"张三","class":"一年级1班","reason":"上课睡觉","teacherName":"李老师","subject":"数学","others":""}]
-[{"studentName":"","class":"三年级2班","reason":"班级卫生不合格","teacherName":"王老师","subject":"","others":"集体扣分"}]`;
+[{"studentName":"","class":"三年级2班","reason":"班级卫生不合格","teacherName":"王老师","subject":"","others":"集体扣分"}]
+[{"studentName":"王五","class":"高二3班","reason":"数学作业未交","teacherName":"刘老师","subject":"数学","others":""}]`;
 
 
       const response = await fetch(aiApiUrl, {
@@ -351,7 +412,6 @@ const ScoresPageEnhanced: React.FC = () => {
 
       const reader = response.body?.getReader();
       const decoder = new TextDecoder();
-      let fullText = '';
 
       if (reader) {
         while (true) {
@@ -382,7 +442,7 @@ const ScoresPageEnhanced: React.FC = () => {
       }
 
       // 移除 AI 思考过程标签（<think>...</think>）
-      let cleanedText = fullText;
+      cleanedText = fullText;
       const thinkTagRegex = /<think>[\s\S]*?<\/think>/gi;
       cleanedText = cleanedText.replace(thinkTagRegex, '');
       
@@ -408,7 +468,7 @@ const ScoresPageEnhanced: React.FC = () => {
         }
       }
 
-      // 映射并匹配学生
+      // 映射并匹配学生和教师
       const parsed: ParsedScoreData[] = [];
       const pendingRecords: any[] = [];
 
@@ -428,19 +488,45 @@ const ScoresPageEnhanced: React.FC = () => {
           return;
         }
 
-        const matched = students.find(s => 
-          s.name === item.studentName || 
-          s.student_id === item.studentId ||
-          s.name.includes(item.studentName)
-        );
+        // 1. 尝试匹配学生
+        let matched = students.find(s => s.name === item.studentName);
+        
+        // 如果没有精确匹配，尝试通过班级+姓名匹配
+        if (!matched && item.class) {
+          matched = students.find(s => 
+            s.class === item.class && s.name === item.studentName
+          );
+        }
+        
+        // 如果还是没匹配，尝试学号匹配
+        if (!matched && item.studentId) {
+          matched = students.find(s => s.student_id === item.studentId);
+        }
+        
+        // 最后尝试模糊匹配（包含）
+        if (!matched) {
+          matched = students.find(s => s.name.includes(item.studentName));
+        }
+
+        // 2. 如果班级信息缺失且匹配到学生，使用学生的班级
+        const finalClass = item.class || matched?.class || '';
+
+        // 3. 尝试匹配或推断教师（如果有班级和科目但没有教师）
+        let finalTeacherName = item.teacherName || '';
+        if (!finalTeacherName && finalClass && item.subject) {
+          // 这里可以添加前端教师匹配逻辑（如果需要）
+          // 目前后端会处理，所以这里只是准备好数据
+        }
 
         parsed.push({
           studentName: item.studentName || '',
           studentId: item.studentId || matched?.student_id || '',
-          class: item.class || matched?.class || '',
+          class: finalClass,
           points: Number(item.points) || 2,
           reason: item.reason || '',
-          teacherName: item.teacherName || '',
+          teacherName: finalTeacherName,
+          subject: item.subject || '',
+          others: item.others || '',
           matchedStudent: matched
         });
       });
@@ -455,18 +541,41 @@ const ScoresPageEnhanced: React.FC = () => {
       setParsedData(parsed);
     } catch (err: any) {
       console.error('AI 解析错误:', err);
-      setError(err.message || 'AI 解析失败，请检查API配置');
+      // 显示错误对话框，让用户可以修改AI返回的文本
+      setAiErrorMessage(err.message || 'AI 解析失败，请检查API配置');
+      setAiErrorText(cleanedText || fullText || '');
+      setAiErrorDialogOpen(true);
     } finally {
       setAiParsing(false);
     }
   };
 
-  // 保存AI配置
-  const handleSaveAiConfig = () => {
+  // 保存AI配置（同时保存到localStorage和后端cookie）
+  const handleSaveAiConfig = async () => {
+    // 1. 本地存一份到localStorage（作为备份）
     localStorage.setItem('aiApiUrl', aiApiUrl);
     localStorage.setItem('aiApiKey', aiApiKey);
     localStorage.setItem('aiModel', aiModel);
-    setSuccess('AI 配置已保存');
+
+    // 2. 保存到后端加密cookie（主要存储）
+    try {
+      await userConfigAPI.save({ 
+        apiUrl: aiApiUrl, 
+        apiKey: aiApiKey, 
+        model: aiModel 
+      });
+      setSuccess('✅ AI 配置已保存（已加密存储到 Cookie 和本地）');
+      console.log('✅ AI配置已保存到Cookie', { 
+        hasApiUrl: !!aiApiUrl, 
+        hasApiKey: !!aiApiKey, 
+        model: aiModel 
+      });
+    } catch (err: any) {
+      // 即使后端失败，也不影响本地保存
+      console.warn('⚠️ Cookie保存失败，仅保存到localStorage', err);
+      setSuccess('⚠️ AI 配置已保存（仅本地），Cookie保存失败');
+    }
+
     setAiConfigOpen(false);
   };
 
@@ -562,6 +671,82 @@ const ScoresPageEnhanced: React.FC = () => {
     setParsedData(newData);
   };
 
+  // 处理AI错误：重试解析
+  const handleAiErrorRetry = () => {
+    setAiErrorDialogOpen(false);
+    
+    // 使用用户修改后的文本重新尝试解析
+    const textToRetry = aiErrorText.trim();
+    if (!textToRetry) {
+      setError('修改后的文本不能为空');
+      return;
+    }
+
+    try {
+      // 尝试解析用户修改后的JSON
+      let jsonData: any[] = [];
+      
+      // 尝试直接解析
+      try {
+        jsonData = JSON.parse(textToRetry);
+      } catch {
+        // 如果直接解析失败，尝试提取JSON部分
+        const jsonMatch = textToRetry.match(/\[[\s\S]*\]/);
+        if (jsonMatch) {
+          jsonData = JSON.parse(jsonMatch[0]);
+        } else {
+          setError('无法解析修改后的JSON数据，请确保格式正确');
+          setAiErrorDialogOpen(true);
+          return;
+        }
+      }
+
+      // 映射并匹配学生
+      const parsed: ParsedScoreData[] = [];
+
+      jsonData.forEach((item: any) => {
+        // 如果学生姓名为空，跳过（或者可以选择加入待处理）
+        if (!item.studentName || item.studentName.trim() === '') {
+          return;
+        }
+
+        const matched = students.find(s => 
+          s.name === item.studentName || 
+          s.student_id === item.studentId ||
+          s.name.includes(item.studentName)
+        );
+
+        parsed.push({
+          studentName: item.studentName || '',
+          studentId: item.studentId || matched?.student_id || '',
+          class: item.class || matched?.class || '',
+          points: Number(item.points) || 2,
+          reason: item.reason || '',
+          teacherName: item.teacherName || '',
+          subject: item.subject || '',
+          others: item.others || '',
+          matchedStudent: matched
+        });
+      });
+
+      setParsedData(parsed);
+      setSuccess(`成功解析 ${parsed.length} 条数据`);
+    } catch (err: any) {
+      console.error('重新解析失败:', err);
+      setError('解析失败：' + (err.message || '请检查JSON格式是否正确'));
+      setAiErrorDialogOpen(true);
+    }
+  };
+
+  // 处理AI错误：舍弃结果
+  const handleAiErrorDiscard = () => {
+    setAiErrorDialogOpen(false);
+    setAiErrorText('');
+    setAiErrorMessage('');
+    setError('已舍弃解析结果');
+    setTimeout(() => setError(''), 3000);
+  };
+
   // 批量导入AI解析的数据
   const handleAiBatchImport = async () => {
     if (parsedData.length === 0) {
@@ -578,6 +763,8 @@ const ScoresPageEnhanced: React.FC = () => {
         name: item.studentName,
         className: item.class,
         teacherName: item.teacherName,
+        subject: item.subject || '',
+        others: item.others || '',
         points: item.points,
         reason: item.reason,
         date: new Date().toISOString().split('T')[0],
@@ -586,15 +773,19 @@ const ScoresPageEnhanced: React.FC = () => {
       // 调用后端 AI 导入 API（会自动匹配学生，未匹配的进入待处理）
       const response = await scoreAPI.aiImport(records);
       
-      const { successCount, pendingCount, errorCount } = response.data;
+      const { successCount, pendingCount, errorCount, errors } = response.data;
+      
+      let message = `导入完成！\n✓ 成功导入 ${successCount} 条\n⏳ ${pendingCount} 条进入待处理\n✗ ${errorCount} 条失败`;
+      
+      if (errors && errors.length > 0) {
+        message += '\n\n错误详情：\n' + errors.map((err: string, idx: number) => `${idx + 1}. ${err}`).join('\n');
+      }
       
       if (pendingCount > 0) {
-        setSuccess(
-          `导入完成！\n✓ 成功导入 ${successCount} 条\n⏳ ${pendingCount} 条进入待处理\n✗ ${errorCount} 条失败\n\n请前往"待处理记录"页面手动处理未匹配的记录。`
-        );
-      } else {
-        setSuccess(`导入完成：成功 ${successCount} 条，失败 ${errorCount} 条`);
+        message += '\n\n请前往"待处理记录"页面手动处理未匹配的记录。';
       }
+      
+      setSuccess(message);
       
       setAiDialogOpen(false);
       setParsedData([]);
@@ -1191,20 +1382,17 @@ const ScoresPageEnhanced: React.FC = () => {
 
               {/* AI 流式响应显示 */}
               {aiParsing && aiStreamingText && (
-                <div style={{ 
+                <Card style={{ 
                   padding: '16px', 
-                  backgroundColor: '#f5f5f5', 
-                  borderRadius: '4px',
                   maxHeight: '200px',
                   overflow: 'auto',
                   whiteSpace: 'pre-wrap',
                   fontFamily: 'monospace',
-                  fontSize: '12px',
-                  border: '1px solid #e0e0e0'
+                  fontSize: '12px'
                 }}>
                   <Label weight="semibold">AI 响应：</Label>
                   <div style={{ marginTop: '8px' }}>{aiStreamingText}</div>
-                </div>
+                </Card>
               )}
 
               {/* 解析结果预览表格 */}
@@ -1220,19 +1408,19 @@ const ScoresPageEnhanced: React.FC = () => {
                       清空
                     </Button>
                   </div>
-                  <div style={{ maxHeight: '300px', overflow: 'auto', border: '1px solid #e0e0e0', borderRadius: '4px' }}>
+                  <Card style={{ maxHeight: '300px', overflow: 'auto', padding: '0' }}>
                     <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                      <thead style={{ position: 'sticky', top: 0, backgroundColor: '#f5f5f5', zIndex: 1 }}>
-                        <tr>
-                          <th style={{ padding: '8px', textAlign: 'left', borderBottom: '2px solid #ccc' }}>#</th>
-                          <th style={{ padding: '8px', textAlign: 'left', borderBottom: '2px solid #ccc' }}>学生</th>
-                          <th style={{ padding: '8px', textAlign: 'left', borderBottom: '2px solid #ccc' }}>学号</th>
-                          <th style={{ padding: '8px', textAlign: 'left', borderBottom: '2px solid #ccc' }}>班级</th>
-                          <th style={{ padding: '8px', textAlign: 'left', borderBottom: '2px solid #ccc' }}>扣分</th>
-                          <th style={{ padding: '8px', textAlign: 'left', borderBottom: '2px solid #ccc' }}>事由</th>
-                          <th style={{ padding: '8px', textAlign: 'left', borderBottom: '2px solid #ccc' }}>教师</th>
-                          <th style={{ padding: '8px', textAlign: 'center', borderBottom: '2px solid #ccc' }}>状态</th>
-                          <th style={{ padding: '8px', textAlign: 'center', borderBottom: '2px solid #ccc' }}>操作</th>
+                      <thead style={{ position: 'sticky', top: 0, zIndex: 1 }}>
+                        <tr style={{ borderBottom: '2px solid' }}>
+                          <th style={{ padding: '8px', textAlign: 'left' }}>#</th>
+                          <th style={{ padding: '8px', textAlign: 'left' }}>学生</th>
+                          <th style={{ padding: '8px', textAlign: 'left' }}>学号</th>
+                          <th style={{ padding: '8px', textAlign: 'left' }}>班级</th>
+                          <th style={{ padding: '8px', textAlign: 'left' }}>扣分</th>
+                          <th style={{ padding: '8px', textAlign: 'left' }}>事由</th>
+                          <th style={{ padding: '8px', textAlign: 'left' }}>教师</th>
+                          <th style={{ padding: '8px', textAlign: 'center' }}>状态</th>
+                          <th style={{ padding: '8px', textAlign: 'center' }}>操作</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -1303,7 +1491,7 @@ const ScoresPageEnhanced: React.FC = () => {
                         ))}
                       </tbody>
                     </table>
-                  </div>
+                  </Card>
                 </div>
               )}
             </DialogContent>
@@ -1351,6 +1539,69 @@ const ScoresPageEnhanced: React.FC = () => {
                   </Button>
                 )}
               </div>
+            </DialogActions>
+          </DialogBody>
+        </DialogSurface>
+      </Dialog>
+
+      {/* AI 错误处理对话框 */}
+      <Dialog open={aiErrorDialogOpen} onOpenChange={(_, data) => setAiErrorDialogOpen(data.open)}>
+        <DialogSurface style={{ maxWidth: '900px', minHeight: '600px' }}>
+          <DialogBody>
+            <DialogTitle>AI 解析错误 - 请手动修改</DialogTitle>
+            <DialogContent style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <MessageBar intent="error">
+                <MessageBarBody>
+                  <strong>错误信息：</strong>{aiErrorMessage}
+                </MessageBarBody>
+              </MessageBar>
+              
+              <div>
+                <Label weight="semibold">AI 返回的文本（可修改）：</Label>
+                <Textarea
+                  resize="vertical"
+                  textarea={{ 
+                    style: { 
+                      minHeight: '400px',
+                      fontSize: '13px',
+                      fontFamily: 'monospace'
+                    }
+                  }}
+                  style={{ 
+                    marginTop: '8px',
+                    width: '100%'
+                  }}
+                  value={aiErrorText}
+                  onChange={(e) => setAiErrorText(e.target.value)}
+                  placeholder="修改 AI 返回的文本，确保为有效的 JSON 格式"
+                />
+              </div>
+
+              <MessageBar intent="info">
+                <MessageBarBody>
+                  💡 提示：请确保文本为有效的 JSON 数组格式，例如：[{"{"}studentName":"张三","class":"高一1班","reason":"迟到","teacherName":"李老师","subject":"数学","others":""{"}"}]
+                </MessageBarBody>
+              </MessageBar>
+            </DialogContent>
+            
+            <DialogActions style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '16px', borderTop: '1px solid #e0e0e0' }}>
+              <Button 
+                appearance="secondary"
+                size="large"
+                onClick={handleAiErrorDiscard}
+                style={{ minWidth: '100px' }}
+              >
+                舍弃
+              </Button>
+              
+              <Button
+                appearance="primary"
+                size="large"
+                onClick={handleAiErrorRetry}
+                style={{ minWidth: '140px' }}
+              >
+                尝试匹配
+              </Button>
             </DialogActions>
           </DialogBody>
         </DialogSurface>

@@ -28,7 +28,7 @@ import {
 } from '@fluentui/react-components';
 import { ArrowDownload20Regular, ArrowUpload20Regular } from '@fluentui/react-icons';
 import { importExportAPI, studentAPI, scoreAPI } from '../services/api';
-import * as XLSX from 'xlsx';
+import * as ExcelJS from 'exceljs';
 
 const useStyles = makeStyles({
   container: {
@@ -138,12 +138,27 @@ const ImportExportPageEnhanced: React.FC = () => {
 
     // 读取文件内容
     const reader = new FileReader();
-    reader.onload = (event) => {
+    reader.onload = async (event) => {
       try {
-        const data = new Uint8Array(event.target?.result as ArrayBuffer);
-        const workbook = XLSX.read(data, { type: 'array' });
-        const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-        const jsonData = XLSX.utils.sheet_to_json(firstSheet, { header: 1 }) as any[][];
+        const buffer = event.target?.result as ArrayBuffer;
+        const workbook = new ExcelJS.Workbook();
+        await workbook.xlsx.load(buffer);
+        
+        const worksheet = workbook.worksheets[0];
+        if (!worksheet) {
+          setError('文件为空');
+          return;
+        }
+
+        // 将worksheet转换为二维数组
+        const jsonData: any[][] = [];
+        worksheet.eachRow((row) => {
+          const rowData: any[] = [];
+          row.eachCell({ includeEmpty: true }, (cell) => {
+            rowData.push(cell.value);
+          });
+          jsonData.push(rowData);
+        });
 
         if (jsonData.length === 0) {
           setError('文件为空');
@@ -240,10 +255,26 @@ const ImportExportPageEnhanced: React.FC = () => {
       const reader = new FileReader();
       reader.onload = async (event) => {
         try {
-          const data = new Uint8Array(event.target?.result as ArrayBuffer);
-          const workbook = XLSX.read(data, { type: 'array' });
-          const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-          const jsonData = XLSX.utils.sheet_to_json(firstSheet, { header: 1 }) as any[][];
+          const buffer = event.target?.result as ArrayBuffer;
+          const workbook = new ExcelJS.Workbook();
+          await workbook.xlsx.load(buffer);
+          
+          const worksheet = workbook.worksheets[0];
+          if (!worksheet) {
+            setError('文件为空');
+            setLoading(false);
+            return;
+          }
+
+          // 将worksheet转换为二维数组
+          const jsonData: any[][] = [];
+          worksheet.eachRow((row) => {
+            const rowData: any[] = [];
+            row.eachCell({ includeEmpty: true }, (cell) => {
+              rowData.push(cell.value);
+            });
+            jsonData.push(rowData);
+          });
           
           const dataRows = hasHeader ? jsonData.slice(1) : jsonData;
           const fileHeaders = hasHeader ? jsonData[0].map(String) : jsonData[0].map((_, i) => `列${i + 1}`);
