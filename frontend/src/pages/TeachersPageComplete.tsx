@@ -26,6 +26,7 @@ import {
   Edit20Regular,
   Info20Regular,
   ArrowImport20Regular,
+  ArrowExport20Regular,
   ChevronDown20Regular,
   ChevronRight20Regular,
 } from '@fluentui/react-icons';
@@ -176,8 +177,11 @@ const TeachersPageComplete: React.FC = () => {
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [detailDialogOpen, setDetailDialogOpen] = useState(false);
+  const [exportDialogOpen, setExportDialogOpen] = useState(false);
   const [currentTeacher, setCurrentTeacher] = useState<Teacher | null>(null);
   const [teacherScores, setTeacherScores] = useState<Score[]>([]);
+  const [exportStartDate, setExportStartDate] = useState('');
+  const [exportEndDate, setExportEndDate] = useState('');
 
   const [formData, setFormData] = useState({
     name: '',
@@ -341,6 +345,65 @@ const TeachersPageComplete: React.FC = () => {
     navigate('/import');
   };
 
+  // 处理导出量化记录
+  const handleExport = async () => {
+    setError('');
+    
+    if (!exportStartDate || !exportEndDate) {
+      setError('请选择开始日期和结束日期');
+      return;
+    }
+
+    if (exportStartDate > exportEndDate) {
+      setError('开始日期不能晚于结束日期');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const response = await teacherAPI.exportRecords(exportStartDate, exportEndDate);
+      
+      // 下载文件
+      const blob = new Blob([response.data], { 
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
+      });
+      const link = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+      const fileName = `教师量化记录-${exportStartDate}-${exportEndDate}.xlsx`;
+      link.setAttribute('href', url);
+      link.setAttribute('download', fileName);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      setSuccess(`成功导出教师量化记录`);
+      setExportDialogOpen(false);
+      setExportStartDate('');
+      setExportEndDate('');
+    } catch (err: any) {
+      // 处理Blob类型的错误响应
+      let errorMessage = '导出失败';
+      
+      if (err.response?.data instanceof Blob) {
+        try {
+          const text = await err.response.data.text();
+          const json = JSON.parse(text);
+          errorMessage = json.error || errorMessage;
+        } catch {
+          // Blob解析失败，使用默认错误消息
+        }
+      } else if (err.response?.data?.error) {
+        errorMessage = err.response.data.error;
+      }
+      
+      setError(errorMessage);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className={styles.container}>
       <div className={styles.header}>
@@ -359,6 +422,13 @@ const TeachersPageComplete: React.FC = () => {
             onClick={handleImport}
           >
             批量导入
+          </Button>
+          <Button
+            appearance="secondary"
+            icon={<ArrowExport20Regular />}
+            onClick={() => setExportDialogOpen(true)}
+          >
+            导出量化记录
           </Button>
         </div>
       </div>
@@ -685,6 +755,52 @@ const TeachersPageComplete: React.FC = () => {
               <DialogTrigger disableButtonEnhancement>
                 <Button appearance="primary">关闭</Button>
               </DialogTrigger>
+            </DialogActions>
+          </DialogBody>
+        </DialogSurface>
+      </Dialog>
+
+      {/* 导出对话框 */}
+      <Dialog open={exportDialogOpen} onOpenChange={(_, data) => setExportDialogOpen(data.open)}>
+        <DialogSurface>
+          <DialogBody>
+            <DialogTitle>导出教师量化记录</DialogTitle>
+            <DialogContent>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                <Field label="开始日期" required hint="必填">
+                  <Input
+                    type="date"
+                    value={exportStartDate}
+                    onChange={(e) => setExportStartDate(e.target.value)}
+                  />
+                </Field>
+                <Field label="结束日期" required hint="必填">
+                  <Input
+                    type="date"
+                    value={exportEndDate}
+                    onChange={(e) => setExportEndDate(e.target.value)}
+                  />
+                </Field>
+                <MessageBar intent="info" style={{ marginTop: '12px' }}>
+                  <MessageBarBody>
+                    <div>• 将导出为 Excel (XLSX) 格式文件</div>
+                    <div>• 按科目组和教师分组统计</div>
+                    <div>• 包含科目组累计分数、教师分数及详细量化记录</div>
+                  </MessageBarBody>
+                </MessageBar>
+              </div>
+            </DialogContent>
+            <DialogActions>
+              <DialogTrigger disableButtonEnhancement>
+                <Button appearance="secondary">取消</Button>
+              </DialogTrigger>
+              <Button 
+                appearance="primary" 
+                onClick={handleExport}
+                disabled={!exportStartDate || !exportEndDate || loading}
+              >
+                {loading ? '导出中...' : '导出'}
+              </Button>
             </DialogActions>
           </DialogBody>
         </DialogSurface>

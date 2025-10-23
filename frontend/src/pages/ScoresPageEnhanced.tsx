@@ -188,6 +188,7 @@ const ScoresPageEnhanced: React.FC = () => {
   const [teacherRecords, setTeacherRecords] = useState<any[]>([]);
   const [teacherDialogOpen, setTeacherDialogOpen] = useState(false);
   const [selectedTeacherRecords, setSelectedTeacherRecords] = useState<Set<number>>(new Set());
+  const [excelImporting, setExcelImporting] = useState(false);
   
   // 查询过滤器
   const [filterStudentName, setFilterStudentName] = useState('');
@@ -793,7 +794,7 @@ const ScoresPageEnhanced: React.FC = () => {
     }
 
     try {
-      setLoading(true);
+      setExcelImporting(true);
       const ExcelJS = await import('exceljs');
       const workbook = new ExcelJS.Workbook();
       const buffer = await excelFile.arrayBuffer();
@@ -860,7 +861,7 @@ const ScoresPageEnhanced: React.FC = () => {
     } catch (err: any) {
       setError(err.response?.data?.error || '导入失败');
     } finally {
-      setLoading(false);
+      setExcelImporting(false);
     }
   };
 
@@ -872,7 +873,7 @@ const ScoresPageEnhanced: React.FC = () => {
     }
 
     try {
-      setLoading(true);
+      setExcelImporting(true);
       const records = Array.from(selectedTeacherRecords).map(index => teacherRecords[index]);
       await scoreAPI.processTeacherRecords(records, action);
       
@@ -883,7 +884,7 @@ const ScoresPageEnhanced: React.FC = () => {
     } catch (err: any) {
       setError(err.response?.data?.error || '处理失败');
     } finally {
-      setLoading(false);
+      setExcelImporting(false);
     }
   };
 
@@ -1243,17 +1244,19 @@ const ScoresPageEnhanced: React.FC = () => {
           </Button>
           <Button
             appearance="secondary"
-            icon={<CloudArrowUp20Regular />}
+            icon={aiParsing || aiImporting ? <Spinner size="tiny" /> : <CloudArrowUp20Regular />}
             onClick={() => setAiDialogOpen(true)}
+            disabled={aiParsing || aiImporting}
           >
-            AI 批量导入
+            {aiParsing ? '解析中...' : aiImporting ? '导入中...' : 'AI 批量导入'}
           </Button>
           <Button
             appearance="secondary"
-            icon={<ArrowUpload20Regular />}
+            icon={excelImporting ? <Spinner size="tiny" /> : <ArrowUpload20Regular />}
             onClick={() => setExcelImportOpen(true)}
+            disabled={excelImporting}
           >
-            表格导入
+            {excelImporting ? '导入中...' : '表格导入'}
           </Button>
         </div>
       </div>
@@ -1744,21 +1747,23 @@ const ScoresPageEnhanced: React.FC = () => {
                   <Button
                     appearance="primary"
                     size="large"
+                    icon={aiParsing ? <Spinner size="tiny" /> : undefined}
                     onClick={handleAiParse}
                     disabled={aiParsing || !aiText.trim() || !aiApiKey}
                     style={{ minWidth: '140px' }}
                   >
-                    {aiParsing ? '⏳ AI 解析中...' : '🤖 开始 AI 解析'}
+                    {aiParsing ? 'AI 解析中...' : '🤖 开始 AI 解析'}
                   </Button>
                 ) : (
-                  <Button
-                    appearance="primary"
+                  <Button 
+                    appearance="primary" 
                     size="large"
+                    icon={aiImporting ? <Spinner size="tiny" /> : undefined}
                     onClick={handleAiBatchImport}
                     disabled={aiImporting}
                     style={{ minWidth: '140px' }}
                   >
-                    {aiImporting ? '⏳ 导入中...' : `✓ 确认导入 ${parsedData.length} 条`}
+                    {aiImporting ? '导入中...' : `✓ 确认导入 ${parsedData.length} 条`}
                   </Button>
                 )}
               </div>
@@ -2067,10 +2072,11 @@ const ScoresPageEnhanced: React.FC = () => {
               </Button>
               <Button 
                 appearance="primary" 
+                icon={excelImporting ? <Spinner size="tiny" /> : undefined}
                 onClick={handleExcelImport}
-                disabled={!excelMapping.name || !excelMapping.reason}
+                disabled={!excelMapping.name || !excelMapping.reason || excelImporting}
               >
-                开始导入
+                {excelImporting ? '导入中...' : '开始导入'}
               </Button>
             </DialogActions>
           </DialogBody>
@@ -2153,24 +2159,27 @@ const ScoresPageEnhanced: React.FC = () => {
               <div style={{ display: 'flex', gap: '8px' }}>
                 <Button 
                   appearance="secondary" 
+                  icon={excelImporting ? <Spinner size="tiny" /> : undefined}
                   onClick={() => handleProcessTeacherRecords('discard')}
-                  disabled={selectedTeacherRecords.size === 0}
+                  disabled={selectedTeacherRecords.size === 0 || excelImporting}
                 >
-                  舍弃选中
+                  {excelImporting ? '处理中...' : '舍弃选中'}
                 </Button>
                 <Button 
                   appearance="primary" 
+                  icon={excelImporting ? <Spinner size="tiny" /> : undefined}
                   onClick={() => handleProcessTeacherRecords('student')}
-                  disabled={selectedTeacherRecords.size === 0}
+                  disabled={selectedTeacherRecords.size === 0 || excelImporting}
                 >
-                  导入为学生量化
+                  {excelImporting ? '导入中...' : '导入为学生量化'}
                 </Button>
                 <Button 
                   appearance="primary" 
+                  icon={excelImporting ? <Spinner size="tiny" /> : undefined}
                   onClick={() => handleProcessTeacherRecords('teacher')}
-                  disabled={selectedTeacherRecords.size === 0}
+                  disabled={selectedTeacherRecords.size === 0 || excelImporting}
                 >
-                  导入为教师量化
+                  {excelImporting ? '导入中...' : '导入为教师量化'}
                 </Button>
               </div>
             </DialogActions>

@@ -3,6 +3,7 @@ import db from '../models/database';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
 import logger from '../utils/logger';
 import { validateInput, sanitizeForLogging } from '../utils/inputValidation';
+import ExcelJS from 'exceljs';
 
 const router = express.Router();
 
@@ -182,6 +183,119 @@ router.post('/batch', authenticateToken, (req: Request, res: Response) => {
   } catch (error) {
     logger.error('批量导入学生失败:', error);
     res.status(500).json({ error: '批量导入学生失败' });
+  }
+});
+
+// 导出学生量化记录
+router.post('/export-records', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const { startDate, endDate } = req.body;
+
+    if (!startDate || !endDate) {
+      return res.status(400).json({ error: '请提供开始日期和结束日期' });
+    }
+
+    logger.info('导出学生量化记录', { startDate, endDate });
+
+    // 获取指定时间范围内有量化记录的学生及其记录
+    const records = db.prepare(`
+      SELECT 
+        st.class,
+        st.name,
+        st.student_id,
+        s.points,
+        s.reason,
+        s.date,
+        s.teacher_name
+      FROM scores s
+      INNER JOIN students st ON s.student_id = st.id
+      WHERE s.date BETWEEN ? AND ?
+      ORDER BY st.class, st.name, s.date
+    `).all(startDate, endDate) as any[];
+
+    if (records.length === 0) {
+      return res.status(404).json({ error: '指定时间范围内没有量化记录' });
+    }
+
+    // 按学生分组数据
+    const dataByStudent: Record<string, {
+      class: string;
+      name: string;
+      studentId: string;
+      records: any[];
+    }> = {};
+
+    records.forEach(record => {
+      const key = `${record.class}-${record.name}-${record.student_id}`;
+      if (!dataByStudent[key]) {
+        dataByStudent[key] = {
+          class: record.class,
+          name: record.name,
+          studentId: record.student_id,
+          records: []
+        };
+      }
+      dataByStudent[key].records.push(record);
+    });
+
+    // 创建Excel工作簿
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet('学生量化记录');
+
+    // 设置列宽
+    worksheet.columns = [
+      { width: 12 }, // 班级
+      { width: 12 }, // 学生姓名
+      { width: 15 }, // 学号
+    ];
+
+    // 添加表头
+    const headerRow = worksheet.addRow(['班级', '学生姓名', '学号']);
+    headerRow.font = { bold: true };
+    headerRow.alignment = { vertical: 'middle', horizontal: 'center' };
+
+    // 按班级和姓名排序
+    const sortedKeys = Object.keys(dataByStudent).sort((a, b) => {
+      const [classA, nameA] = a.split('-');
+      const [classB, nameB] = b.split('-');
+      if (classA !== classB) return classA.localeCompare(classB, 'zh-CN');
+      return nameA.localeCompare(nameB, 'zh-CN');
+    });
+
+    // 填充数据
+    sortedKeys.forEach(key => {
+      const studentData = dataByStudent[key];
+      const row: any[] = [
+        studentData.class,
+        studentData.name,
+        studentData.studentId
+      ];
+
+      // 添加量化记录（格式：日期学生姓名原因分数）
+      studentData.records.forEach(record => {
+        const dateStr = record.date.replace(/-/g, ''); // 20251023
+        const teacherName = record.teacher_name || '未知';
+        const reason = record.reason || '无';
+        const points = record.points;
+        row.push(`${dateStr}${teacherName}${reason}${points}分`);
+      });
+
+      worksheet.addRow(row);
+    });
+
+    // 设置响应头
+    const fileName = `学生量化记录-${startDate}-${endDate}.xlsx`;
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(fileName)}`);
+
+    // 生成Excel并发送
+    await workbook.xlsx.write(res);
+    res.end();
+
+    logger.info('学生量化记录导出成功', { startDate, endDate, studentCount: sortedKeys.length });
+  } catch (error: any) {
+    logger.error('导出学生量化记录失败', { error: error.message });
+    res.status(500).json({ error: '导出失败: ' + error.message });
   }
 });
 

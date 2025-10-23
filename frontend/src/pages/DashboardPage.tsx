@@ -33,7 +33,8 @@ const useStyles = makeStyles({
   container: {
     display: 'flex',
     flexDirection: 'column',
-    minHeight: '100vh',
+    height: '100vh',
+    overflow: 'hidden',
   },
   header: {
     display: 'flex',
@@ -42,6 +43,12 @@ const useStyles = makeStyles({
     padding: '16px 32px',
     backgroundColor: tokens.colorBrandBackground,
     color: tokens.colorNeutralForegroundOnBrand,
+    position: 'fixed',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 1000,
+    height: '64px',
   },
   nav: {
     display: 'flex',
@@ -50,18 +57,36 @@ const useStyles = makeStyles({
   },
   layout: {
     display: 'flex',
-    flex: 1,
+    marginTop: '64px',
+    height: 'calc(100vh - 64px)',
+    overflow: 'hidden',
   },
   sidebar: {
     width: '240px',
     backgroundColor: tokens.colorNeutralBackground1,
     borderRight: `1px solid ${tokens.colorNeutralStroke1}`,
     padding: '20px',
+    display: 'flex',
+    flexDirection: 'column',
+    position: 'fixed',
+    left: 0,
+    top: '64px',
+    bottom: 0,
+    overflowY: 'auto',
+    zIndex: 999,
+  },
+  sidebarBottom: {
+    marginTop: 'auto',
+    paddingTop: '20px',
+    borderTop: `1px solid ${tokens.colorNeutralStroke2}`,
   },
   main: {
     flex: 1,
+    marginLeft: '240px',
     backgroundColor: tokens.colorNeutralBackground2,
     overflowY: 'auto',
+    overflowX: 'hidden',
+    height: '100%',
   },
   menuItem: {
     width: '100%',
@@ -84,12 +109,15 @@ const DashboardPage: React.FC = () => {
 
   const menuItems = [
     { path: '/', label: '首页', icon: <Home20Regular /> },
-    { path: '/students', label: '学生管理', icon: <People20Regular /> },
-    { path: '/teachers', label: '教师管理', icon: <PersonBoard20Regular /> },
     { path: '/scores', label: '量化管理', icon: <Trophy20Regular /> },
     { path: '/pending', label: '待处理记录', icon: <ClockRegular /> },
+    { path: '/students', label: '学生管理', icon: <People20Regular /> },
+    { path: '/teachers', label: '教师管理', icon: <PersonBoard20Regular /> },
     { path: '/import', label: '数据导入', icon: <ArrowUpload20Regular /> },
     { path: '/backup', label: '备份恢复', icon: <DatabaseArrowDown20Regular /> },
+  ];
+
+  const bottomMenuItems = [
     { path: '/settings', label: '系统设置', icon: <Settings20Regular /> },
     { path: '/about', label: '关于', icon: <InfoRegular /> },
   ];
@@ -108,22 +136,42 @@ const DashboardPage: React.FC = () => {
 
       <div className={styles.layout}>
         <aside className={styles.sidebar}>
-          <h3 style={{ marginBottom: '20px' }}>功能模块</h3>
-          {menuItems.map((item) => (
-            <Link
-              key={item.path}
-              to={item.path}
-              style={{ textDecoration: 'none', display: 'block' }}
-            >
-              <Button
-                appearance={location.pathname === item.path ? 'primary' : 'subtle'}
-                icon={item.icon}
-                className={styles.menuItem}
+          <div>
+            <h3 style={{ marginBottom: '20px' }}>功能模块</h3>
+            {menuItems.map((item) => (
+              <Link
+                key={item.path}
+                to={item.path}
+                style={{ textDecoration: 'none', display: 'block' }}
               >
-                {item.label}
-              </Button>
-            </Link>
-          ))}
+                <Button
+                  appearance={location.pathname === item.path ? 'primary' : 'subtle'}
+                  icon={item.icon}
+                  className={styles.menuItem}
+                >
+                  {item.label}
+                </Button>
+              </Link>
+            ))}
+          </div>
+          
+          <div className={styles.sidebarBottom}>
+            {bottomMenuItems.map((item) => (
+              <Link
+                key={item.path}
+                to={item.path}
+                style={{ textDecoration: 'none', display: 'block' }}
+              >
+                <Button
+                  appearance={location.pathname === item.path ? 'primary' : 'subtle'}
+                  icon={item.icon}
+                  className={styles.menuItem}
+                >
+                  {item.label}
+                </Button>
+              </Link>
+            ))}
+          </div>
         </aside>
 
         <main className={styles.main}>

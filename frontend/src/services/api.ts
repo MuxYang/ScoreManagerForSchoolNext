@@ -114,6 +114,8 @@ export const studentAPI = {
     apiClient.put(`/students/${id}`, data),
   delete: (id: number) => apiClient.delete(`/students/${id}`),
   batchImport: (students: any[]) => apiClient.post('/students/batch', { students }),
+  exportRecords: (startDate: string, endDate: string) =>
+    apiClient.post('/students/export-records', { startDate, endDate }, { responseType: 'blob' }),
 };
 
 // 教师 API
@@ -125,6 +127,8 @@ export const teacherAPI = {
   update: (id: number, data: { name: string; subject: string; phone?: string; email?: string }) =>
     apiClient.put(`/teachers/${id}`, data),
   delete: (id: number) => apiClient.delete(`/teachers/${id}`),
+  exportRecords: (startDate: string, endDate: string) =>
+    apiClient.post('/teachers/export-records', { startDate, endDate }, { responseType: 'blob' }),
 };
 
 // 积分 API

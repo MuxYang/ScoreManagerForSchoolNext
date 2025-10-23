@@ -196,42 +196,63 @@ const StudentsPage: React.FC = () => {
   };
 
   // 处理导出
-  const handleExport = () => {
+  // 处理导出学生量化记录
+  const handleExport = async () => {
     setError('');
     
-    let exportStudents = [...students];
-    
-    // 如果指定了日期范围，根据创建时间筛选（这里简化处理，实际应该在API中实现）
-    // if (exportStartDate || exportEndDate) {
-    //   const start = exportStartDate ? new Date(exportStartDate) : new Date(0);
-    //   const end = exportEndDate ? new Date(exportEndDate) : new Date();
-    //   
-    //   // 注意：这里假设students有created_at字段，如果没有则导出全部
-    //   exportStudents = exportStudents.filter(s => {
-    //     const createdAt = new Date(s.created_at);
-    //     return createdAt >= start && createdAt <= end;
-    //   });
-    // }
+    if (!exportStartDate || !exportEndDate) {
+      setError('请选择开始日期和结束日期');
+      return;
+    }
 
-    // 生成CSV内容
-    const csvContent = [
-      ['学号', '姓名', '班级'].join(','),
-      ...exportStudents.map(s => [s.student_id, s.name, s.class].join(','))
-    ].join('\n');
+    if (exportStartDate > exportEndDate) {
+      setError('开始日期不能晚于结束日期');
+      return;
+    }
 
-    // 下载文件
-    const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    const url = URL.createObjectURL(blob);
-    link.setAttribute('href', url);
-    link.setAttribute('download', `students_${new Date().toISOString().split('T')[0]}.csv`);
-    link.style.visibility = 'hidden';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    try {
+      setLoading(true);
+      const response = await studentAPI.exportRecords(exportStartDate, exportEndDate);
+      
+      // 下载文件
+      const blob = new Blob([response.data], { 
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
+      });
+      const link = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+      const fileName = `学生量化记录-${exportStartDate}-${exportEndDate}.xlsx`;
+      link.setAttribute('href', url);
+      link.setAttribute('download', fileName);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
 
-    setSuccess(`成功导出 ${exportStudents.length} 个学生`);
-    setExportDialogOpen(false);
+      setSuccess(`成功导出学生量化记录`);
+      setExportDialogOpen(false);
+      setExportStartDate('');
+      setExportEndDate('');
+    } catch (err: any) {
+      // 处理Blob类型的错误响应
+      let errorMessage = '导出失败';
+      
+      if (err.response?.data instanceof Blob) {
+        try {
+          const text = await err.response.data.text();
+          const json = JSON.parse(text);
+          errorMessage = json.error || errorMessage;
+        } catch {
+          // Blob解析失败，使用默认错误消息
+        }
+      } else if (err.response?.data?.error) {
+        errorMessage = err.response.data.error;
+      }
+      
+      setError(errorMessage);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const columns: TableColumnDefinition<Student>[] = [
@@ -300,7 +321,7 @@ const StudentsPage: React.FC = () => {
             icon={<ArrowExport20Regular />}
             onClick={() => setExportDialogOpen(true)}
           >
-            批量导出
+            导出量化记录
           </Button>
           <Button
             appearance="primary"
@@ -461,36 +482,42 @@ const StudentsPage: React.FC = () => {
       <Dialog open={exportDialogOpen} onOpenChange={(_, data) => setExportDialogOpen(data.open)}>
         <DialogSurface>
           <DialogBody>
-            <DialogTitle>导出学生数据</DialogTitle>
+            <DialogTitle>导出学生量化记录</DialogTitle>
             <DialogContent>
               <div className={styles.form}>
-                <Field label="开始日期" hint="可选，留空表示不限制">
+                <Field label="开始日期" required hint="必填">
                   <Input
                     type="date"
                     value={exportStartDate}
                     onChange={(e) => setExportStartDate(e.target.value)}
                   />
                 </Field>
-                <Field label="结束日期" hint="可选，留空表示不限制">
+                <Field label="结束日期" required hint="必填">
                   <Input
                     type="date"
                     value={exportEndDate}
                     onChange={(e) => setExportEndDate(e.target.value)}
                   />
                 </Field>
-                <div style={{ color: '#666', fontSize: '12px' }}>
-                  <div>• 将导出为 CSV 格式文件</div>
-                  <div>• 包含学号、姓名、班级信息</div>
-                  <div>• 可用 Excel 打开</div>
-                </div>
+                <MessageBar intent="info">
+                  <MessageBarBody>
+                    <div>• 将导出为 Excel (XLSX) 格式文件</div>
+                    <div>• 仅包含有量化记录的学生</div>
+                    <div>• 包含班级、姓名、学号及详细量化记录</div>
+                  </MessageBarBody>
+                </MessageBar>
               </div>
             </DialogContent>
             <DialogActions>
               <DialogTrigger disableButtonEnhancement>
                 <Button appearance="secondary">取消</Button>
               </DialogTrigger>
-              <Button appearance="primary" onClick={handleExport}>
-                导出
+              <Button 
+                appearance="primary" 
+                onClick={handleExport}
+                disabled={!exportStartDate || !exportEndDate || loading}
+              >
+                {loading ? '导出中...' : '导出'}
               </Button>
             </DialogActions>
           </DialogBody>
