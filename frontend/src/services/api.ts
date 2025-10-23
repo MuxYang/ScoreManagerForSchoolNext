@@ -10,9 +10,43 @@ const apiClient = axios.create({
   withCredentials: true, // 允许发送和接收 Cookie
 });
 
-// 请求拦截器 - Cookie 会自动发送，保留 localStorage token 作为备用
+// 获取一次性token的函数
+async function getOneTimeToken(): Promise<string> {
+  try {
+    const response = await axios.get(`${API_BASE_URL}/auth/token`);
+    return response.data.token;
+  } catch (error) {
+    console.error('获取一次性token失败:', error);
+    throw error;
+  }
+}
+
+// 请求拦截器 - 自动添加一次性token和备用身份验证
 apiClient.interceptors.request.use(
-  (config) => {
+  async (config) => {
+    // 不需要token的公开接口列表
+    const publicPaths = [
+      '/auth/token',
+      '/auth/login',
+      '/auth/verify-cookie',
+      '/auth/security-question',
+      '/auth/reset-password'
+    ];
+    
+    // 检查是否为公开接口
+    const isPublicPath = publicPaths.some(path => config.url?.includes(path));
+    
+    // 对于非公开接口，获取并添加一次性token
+    if (!isPublicPath) {
+      try {
+        const oneTimeToken = await getOneTimeToken();
+        config.headers['x-request-token'] = oneTimeToken;
+      } catch (error) {
+        console.error('无法获取请求token:', error);
+        // 继续请求，让后端返回403
+      }
+    }
+    
     // Cookie 中的 token 会自动发送，这里作为备用方案
     // 如果 Cookie 失效，从 localStorage 获取 token
     const token = localStorage.getItem('token');
@@ -103,6 +137,10 @@ export const scoreAPI = {
   delete: (id: number) => apiClient.delete(`/scores/${id}`),
   batchImport: (scores: any[]) => apiClient.post('/scores/batch', { scores }),
   aiImport: (records: any[]) => apiClient.post('/scores/ai-import', { records }),
+  // 违纪记录导入（包含教师检测）
+  importRecords: (records: any[]) => apiClient.post('/scores/import-records', { records }),
+  processTeacherRecords: (records: any[], action: 'teacher' | 'student' | 'discard') =>
+    apiClient.post('/scores/import-records/process-teachers', { records, action }),
   getPending: (params?: { status?: string; limit?: number; offset?: number }) => 
     apiClient.get('/scores/pending', { params }),
   resolvePending: (id: number, studentId: number) => 

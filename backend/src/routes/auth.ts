@@ -19,8 +19,20 @@ import {
   validateInput,
   sanitizeForLogging
 } from '../utils/inputValidation';
+import { generateOneTimeToken } from '../utils/oneTimeToken';
 
 const router = express.Router();
+
+// 获取一次性token的端点（不需要身份验证，在token验证中间件之前）
+router.get('/token', (req: Request, res: Response) => {
+  try {
+    const token = generateOneTimeToken();
+    res.json({ token });
+  } catch (error) {
+    logger.error('生成token失败:', error);
+    res.status(500).json({ error: '生成token失败' });
+  }
+});
 
 // JWT_SECRET 获取函数（延迟检查，确保.env已加载）
 function getJwtSecret(): string {

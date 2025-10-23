@@ -276,8 +276,8 @@ router.post('/batch', authenticateToken, (req: Request, res: Response) => {
   }
 });
 
-// AI批量导入扣分记录（智能匹配，未匹配的进入待处理）
-// 扣分数据从数据库读取（默认2分），前端只需传递学生信息
+// AI批量导入量化记录（智能匹配，未匹配的进入待处理）
+// 量化数据从数据库读取（默认2分），前端只需传递学生信息
 router.post('/ai-import', authenticateToken, (req: Request, res: Response) => {
   try {
     const { records } = req.body;
@@ -308,7 +308,7 @@ router.post('/ai-import', authenticateToken, (req: Request, res: Response) => {
         try {
           let { name, className, teacherName, subject, others, reason, date } = record;
           
-          // 扣分数据从数据库读取，默认2分（与前端默认值保持一致）
+          // 量化数据从数据库读取，默认2分（与前端默认值保持一致）
           const points = record.points !== undefined && record.points !== null ? record.points : 2;
 
           if (!name) {
@@ -417,7 +417,7 @@ router.post('/ai-import', authenticateToken, (req: Request, res: Response) => {
         errorCount: errors.length
       }));
 
-    logger.info('AI批量导入扣分记录完成', {
+    logger.info('AI批量导入量化记录完成', {
       total: records.length,
       successCount,
       pendingCount,
@@ -435,7 +435,7 @@ router.post('/ai-import', authenticateToken, (req: Request, res: Response) => {
     });
 
   } catch (error: any) {
-    logger.error('AI批量导入扣分记录失败:', error);
+    logger.error('AI批量导入量化记录失败:', error);
     res.status(500).json({ error: 'AI批量导入失败: ' + error.message });
   }
 });
@@ -491,6 +491,208 @@ router.get('/pending', authenticateToken, (req: Request, res: Response) => {
   }
 });
 
+// 违纪记录批量导入（类似学生/教师导入，包含教师检测）
+router.post('/import-records', authenticateToken, (req: Request, res: Response) => {
+  try {
+    const { records } = req.body;
+    const authReq = req as AuthRequest;
+
+    if (!Array.isArray(records) || records.length === 0) {
+      return res.status(400).json({ error: '记录数据不能为空' });
+    }
+
+    // 获取所有教师姓名用于检测
+    const teachers = db.prepare('SELECT name FROM teachers').all() as { name: string }[];
+    const teacherNames = new Set(teachers.map(t => t.name));
+
+    // 获取所有学生用于匹配
+    const students = db.prepare('SELECT id, student_id, name, class FROM students').all() as any[];
+
+    let successCount = 0;
+    let teacherRecordCount = 0;
+    const errors: string[] = [];
+    const teacherRecords: any[] = []; // 检测到的教师记录
+    const pendingRecords: any[] = []; // 无法匹配的学生记录
+
+    const insertScore = db.prepare(`
+      INSERT INTO scores (student_id, points, reason, teacher_name, date)
+      VALUES (?, ?, ?, ?, ?)
+    `);
+
+    const insertPending = db.prepare(`
+      INSERT INTO pending_scores (student_name, class_name, teacher_name, subject, points, reason, others, date, raw_data, match_suggestions, created_by)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+
+    records.forEach((record: any, index: number) => {
+      try {
+        const { name, class: className, studentId, reason, points, teacherName, subject, date } = record;
+        const finalPoints = Number(points) || 2;
+
+        if (!name) {
+          errors.push(`记录 ${index + 1}：缺少姓名`);
+          return;
+        }
+
+        // 检测是否为教师姓名
+        if (teacherNames.has(name)) {
+          teacherRecords.push({
+            index: index + 1,
+            name,
+            class: className || '',
+            reason: reason || '',
+            points: finalPoints,
+            teacherName: teacherName || '',
+            subject: subject || '',
+            date: date || new Date().toISOString().split('T')[0],
+            raw: record
+          });
+          teacherRecordCount++;
+          return;
+        }
+
+        // 尝试匹配学生
+        const matchResult = matchStudentForAIImport(db, name, className, teacherName);
+
+        if (matchResult.matched && matchResult.student) {
+          // 成功匹配，直接导入
+          insertScore.run(
+            matchResult.student.id,
+            finalPoints,
+            reason || '',
+            teacherName || '',
+            date || new Date().toISOString().split('T')[0]
+          );
+          successCount++;
+        } else {
+          // 无法匹配，移入待处理
+          const normalizedClass = className ? normalizeClassName(className) : '';
+          insertPending.run(
+            name,
+            normalizedClass,
+            teacherName || '',
+            subject || '',
+            finalPoints,
+            reason || '',
+            '',
+            date || new Date().toISOString().split('T')[0],
+            JSON.stringify(record),
+            JSON.stringify(matchResult.suggestions || []),
+            authReq.userId
+          );
+          pendingRecords.push({
+            name,
+            className: normalizedClass,
+            reason: `未匹配到学生：${name}`,
+            suggestions: matchResult.suggestions || []
+          });
+        }
+      } catch (error: any) {
+        errors.push(`记录 ${index + 1}（${record.name || '未知'}）：${error.message}`);
+      }
+    });
+
+    logger.info('违纪记录批量导入完成', {
+      total: records.length,
+      successCount,
+      teacherRecordCount,
+      pendingCount: pendingRecords.length,
+      errorCount: errors.length
+    });
+
+    res.json({
+      success: true,
+      successCount,
+      teacherRecordCount,
+      teacherRecords: teacherRecords.slice(0, 50), // 最多返回50条
+      pendingCount: pendingRecords.length,
+      errorCount: errors.length,
+      errors: errors.slice(0, 10),
+      message: `成功导入 ${successCount} 条学生记录，检测到 ${teacherRecordCount} 条教师记录，${pendingRecords.length} 条待处理`
+    });
+
+  } catch (error: any) {
+    logger.error('违纪记录批量导入失败:', error);
+    res.status(500).json({ error: '批量导入失败: ' + error.message });
+  }
+});
+
+// 批量处理教师记录（可选择导入教师量化、学生量化或舍弃）
+router.post('/import-records/process-teachers', authenticateToken, (req: Request, res: Response) => {
+  try {
+    const { records, action } = req.body; // action: 'teacher', 'student', 'discard'
+
+    if (!Array.isArray(records) || records.length === 0) {
+      return res.status(400).json({ error: '记录数据不能为空' });
+    }
+
+    if (!['teacher', 'student', 'discard'].includes(action)) {
+      return res.status(400).json({ error: '无效的操作类型' });
+    }
+
+    if (action === 'discard') {
+      return res.json({ success: true, message: `已舍弃 ${records.length} 条记录` });
+    }
+
+    let successCount = 0;
+    const errors: string[] = [];
+
+    if (action === 'teacher') {
+      // 导入为教师量化记录
+      // TODO: 实现教师量化表（如果需要）
+      // 目前简单记录到scores表，teacher_name字段存储被记录的教师
+      const insertScore = db.prepare(`
+        INSERT INTO scores (student_id, points, reason, teacher_name, date)
+        VALUES (?, ?, ?, ?, ?)
+      `);
+
+      // 使用一个特殊的student_id（如-1）表示这是教师记录
+      // 或者创建单独的teacher_scores表
+      errors.push('教师量化功能尚未完全实现');
+      
+    } else if (action === 'student') {
+      // 将教师姓名作为学生姓名重新匹配导入
+      const students = db.prepare('SELECT id, student_id, name, class FROM students').all() as any[];
+      const insertScore = db.prepare(`
+        INSERT INTO scores (student_id, points, reason, teacher_name, date)
+        VALUES (?, ?, ?, ?, ?)
+      `);
+
+      records.forEach((record: any, index: number) => {
+        try {
+          const matchedStudent = students.find(s => s.name === record.name);
+          if (matchedStudent) {
+            insertScore.run(
+              matchedStudent.id,
+              record.points || 2,
+              record.reason || '',
+              record.teacherName || '',
+              record.date || new Date().toISOString().split('T')[0]
+            );
+            successCount++;
+          } else {
+            errors.push(`记录 ${index + 1}（${record.name}）：未找到匹配的学生`);
+          }
+        } catch (error: any) {
+          errors.push(`记录 ${index + 1}：${error.message}`);
+        }
+      });
+    }
+
+    res.json({
+      success: true,
+      successCount,
+      errorCount: errors.length,
+      errors,
+      message: `成功处理 ${successCount} 条记录`
+    });
+
+  } catch (error: any) {
+    logger.error('处理教师记录失败:', error);
+    res.status(500).json({ error: '处理失败: ' + error.message });
+  }
+});
+
 // 手动处理待处理记录（确认匹配）
 router.post('/pending/:id/resolve', authenticateToken, (req: Request, res: Response) => {
   try {
@@ -530,7 +732,7 @@ router.post('/pending/:id/resolve', authenticateToken, (req: Request, res: Respo
       }
     }
 
-    // 创建扣分记录
+    // 创建量化记录
     const scoreResult = db.prepare(`
       INSERT INTO scores (student_id, points, reason, teacher_name, date)
       VALUES (?, ?, ?, ?, ?)

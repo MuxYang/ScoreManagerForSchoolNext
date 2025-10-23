@@ -121,7 +121,7 @@ const ImportExportPageEnhanced: React.FC = () => {
       link.click();
       link.remove();
       
-      setSuccess('扣分数据导出成功');
+      setSuccess('量化数据导出成功');
     } catch (err: any) {
       setError(err.response?.data?.error || '导出失败');
     } finally {
@@ -198,7 +198,7 @@ const ImportExportPageEnhanced: React.FC = () => {
             const lower = header.toLowerCase();
             if (lower.includes('学号') || lower.includes('student')) {
               autoMapping['student_id'] = header;
-            } else if (lower.includes('扣分') || lower.includes('积分') || lower.includes('points') || lower.includes('分数')) {
+            } else if (lower.includes('量化') || lower.includes('积分') || lower.includes('points') || lower.includes('分数')) {
               autoMapping['points'] = header;
             } else if (lower.includes('事由') || lower.includes('reason')) {
               autoMapping['reason'] = header;
@@ -242,7 +242,7 @@ const ImportExportPageEnhanced: React.FC = () => {
       }
     } else {
       if (!columnMapping.student_id || !columnMapping.points || !columnMapping.reason) {
-        setError('请完成所有必填字段的列映射（学号、扣分、事由）');
+        setError('请完成所有必填字段的列映射（学号、量化、事由）');
         return;
       }
     }
@@ -291,7 +291,7 @@ const ImportExportPageEnhanced: React.FC = () => {
             await studentAPI.batchImport(students);
             setSuccess(`成功导入 ${students.length} 条学生记录`);
           } else {
-            // 构建扣分数据
+            // 构建量化数据
             const scores = dataRows.map(row => ({
               studentId: row[fileHeaders.indexOf(columnMapping.student_id)],
               points: Number(row[fileHeaders.indexOf(columnMapping.points)]) || 0,
@@ -302,7 +302,7 @@ const ImportExportPageEnhanced: React.FC = () => {
 
             // 批量导入
             await scoreAPI.batchImport(scores);
-            setSuccess(`成功导入 ${scores.length} 条扣分记录`);
+            setSuccess(`成功导入 ${scores.length} 条量化记录`);
           }
 
           setImportDialogOpen(false);
@@ -370,8 +370,8 @@ const ImportExportPageEnhanced: React.FC = () => {
           </Card>
 
           <Card className={styles.card}>
-            <h3>导出扣分数据</h3>
-            <p>将所有扣分记录导出为 Excel 文件</p>
+            <h3>导出量化数据</h3>
+            <p>将所有量化记录导出为 Excel 文件</p>
             <div className={styles.actions}>
               <Button
                 appearance="primary"

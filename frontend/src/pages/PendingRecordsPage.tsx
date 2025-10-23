@@ -225,7 +225,7 @@ const PendingRecordsPage: React.FC = () => {
       await scoreAPI.resolvePending(editingRecord!.id!, matchedStudent.id);
       
       setEditDialogOpen(false);
-      setSuccess('记录已处理并添加到扣分记录');
+      setSuccess('记录已处理并添加到量化记录');
       setTimeout(() => setSuccess(''), 3000);
       
       // 重新加载待处理记录列表
@@ -408,7 +408,7 @@ const PendingRecordsPage: React.FC = () => {
     createTableColumn<PendingRecord>({
       columnId: 'points',
       compare: (a, b) => (a.points || 0) - (b.points || 0),
-      renderHeaderCell: () => '扣分',
+      renderHeaderCell: () => '量化',
       renderCell: (item) => item.points || 2,
     }),
     createTableColumn<PendingRecord>({
@@ -564,7 +564,7 @@ const PendingRecordsPage: React.FC = () => {
                   <Input
                     value={editForm.reason}
                     onChange={(e) => setEditForm({ ...editForm, reason: e.target.value })}
-                    placeholder="扣分原因"
+                    placeholder="量化原因"
                   />
                 </div>
 
@@ -587,7 +587,7 @@ const PendingRecordsPage: React.FC = () => {
                 </div>
 
                 <div>
-                  <Label>扣分</Label>
+                  <Label>量化</Label>
                   <Input
                     type="number"
                     value={String(editForm.points)}

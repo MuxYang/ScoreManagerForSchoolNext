@@ -32,8 +32,8 @@ const useStyles = makeStyles({
   },
   statsGrid: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-    gap: '16px',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+    gap: '20px',
     marginBottom: '32px',
   },
   statsCard: {
@@ -156,7 +156,12 @@ const HomePage: React.FC = () => {
 
   return (
     <div className={styles.container}>
-      <Title1 style={{ marginBottom: '24px' }}>📊 数据概览</Title1>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px' }}>
+        <Title1>📊 数据概览</Title1>
+        <Body1 style={{ color: tokens.colorNeutralForeground3 }}>
+          实时更新 · {new Date().toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric' })}
+        </Body1>
+      </div>
 
       {/* 统计卡片 */}
       <div className={styles.statsGrid}>

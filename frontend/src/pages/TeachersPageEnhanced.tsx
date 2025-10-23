@@ -187,10 +187,10 @@ const TeachersPageEnhanced: React.FC = () => {
       // 按科目分组并排序
       const grouped = response.data.grouped || [];
       
-      // 按总扣分排序科目组（从高到低）
+      // 按总量化排序科目组（从高到低）
       grouped.sort((a: GroupedTeachers, b: GroupedTeachers) => b.total_points - a.total_points);
       
-      // 每个组内的教师按扣分排序（从高到低）
+      // 每个组内的教师按量化排序（从高到低）
       grouped.forEach((group: GroupedTeachers) => {
         group.teachers.sort((a: Teacher, b: Teacher) => 
           (b.total_points || 0) - (a.total_points || 0)
@@ -211,7 +211,7 @@ const TeachersPageEnhanced: React.FC = () => {
       const response = await scoreAPI.getAll({ teacherName });
       setTeacherScores(response.data);
     } catch (err: any) {
-      setError(err.response?.data?.error || '加载扣分记录失败');
+      setError(err.response?.data?.error || '加载量化记录失败');
     } finally {
       setLoading(false);
     }
@@ -363,7 +363,7 @@ const TeachersPageEnhanced: React.FC = () => {
                   </span>
                 </div>
                 <div className={styles.subjectPoints}>
-                  总扣分: {group.total_points}
+                  总量化: {group.total_points}
                 </div>
               </div>
 
@@ -375,7 +375,7 @@ const TeachersPageEnhanced: React.FC = () => {
                       <th className={styles.tableHeader}>任教班级</th>
                       <th className={styles.tableHeader}>联系电话</th>
                       <th className={styles.tableHeader}>邮箱</th>
-                      <th className={styles.tableHeader}>累计扣分</th>
+                      <th className={styles.tableHeader}>累计量化</th>
                       <th className={styles.tableHeader}>操作</th>
                     </tr>
                   </thead>
@@ -558,18 +558,18 @@ const TeachersPageEnhanced: React.FC = () => {
         </DialogSurface>
       </Dialog>
 
-      {/* 教师详情对话框（扣分记录） */}
+      {/* 教师详情对话框（量化记录） */}
       <Dialog open={detailDialogOpen} onOpenChange={(_, data) => setDetailDialogOpen(data.open)}>
         <DialogSurface style={{ maxWidth: '600px' }}>
           <DialogBody>
-            <DialogTitle>教师扣分记录</DialogTitle>
+            <DialogTitle>教师量化记录</DialogTitle>
             <DialogContent>
               {currentTeacher && (
                 <>
                   <div style={{ marginBottom: '16px' }}>
                     <Label>姓名：{currentTeacher.name}</Label><br />
                     <Label>科目：{currentTeacher.subject}</Label><br />
-                    <Label>累计扣分：
+                    <Label>累计量化：
                       <span style={{
                         fontWeight: 600,
                         fontSize: '18px',
@@ -584,10 +584,10 @@ const TeachersPageEnhanced: React.FC = () => {
 
                   <div className={styles.scoresList}>
                     {loading ? (
-                      <Spinner label="加载扣分记录中..." />
+                      <Spinner label="加载量化记录中..." />
                     ) : teacherScores.length === 0 ? (
                       <div style={{ textAlign: 'center', padding: '20px', color: tokens.colorNeutralForeground3 }}>
-                        暂无扣分记录
+                        暂无量化记录
                       </div>
                     ) : (
                       teacherScores.map((score) => (

@@ -125,7 +125,7 @@ export function initializeDatabase() {
     )
   `);
 
-  // 待处理扣分记录表（用于AI导入时无法精确匹配的记录）
+  // 待处理量化记录表（用于AI导入时无法精确匹配的记录）
   db.exec(`
     CREATE TABLE IF NOT EXISTS pending_scores (
       id INTEGER PRIMARY KEY AUTOINCREMENT,

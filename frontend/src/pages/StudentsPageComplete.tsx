@@ -239,7 +239,7 @@ const StudentsPageComplete: React.FC = () => {
       const response = await scoreAPI.getAll({ studentId });
       setStudentScores(response.data);
     } catch (err: any) {
-      setError(err.response?.data?.error || '加载扣分记录失败');
+      setError(err.response?.data?.error || '加载量化记录失败');
     } finally {
       setLoading(false);
     }
@@ -591,7 +591,7 @@ const StudentsPageComplete: React.FC = () => {
                 </th>
                 <th className={styles.tableHeader} onClick={() => handleSort('total_points')}>
                   <div className={styles.sortableHeader}>
-                    累计扣分 {renderSortIcon('total_points')}
+                    累计量化 {renderSortIcon('total_points')}
                   </div>
                 </th>
                 <th className={styles.tableHeader}>操作</th>
@@ -785,11 +785,11 @@ const StudentsPageComplete: React.FC = () => {
         </DialogSurface>
       </Dialog>
 
-      {/* 学生详情对话框（扣分记录） */}
+      {/* 学生详情对话框（量化记录） */}
       <Dialog open={detailDialogOpen} onOpenChange={(_, data) => setDetailDialogOpen(data.open)}>
         <DialogSurface style={{ maxWidth: '600px' }}>
           <DialogBody>
-            <DialogTitle>学生扣分记录</DialogTitle>
+            <DialogTitle>学生量化记录</DialogTitle>
             <DialogContent>
               {currentStudent && (
                 <>
@@ -797,7 +797,7 @@ const StudentsPageComplete: React.FC = () => {
                     <Label>学号：{currentStudent.student_id}</Label><br />
                     <Label>姓名：{currentStudent.name}</Label><br />
                     <Label>班级：{currentStudent.class}</Label><br />
-                    <Label>累计扣分：
+                    <Label>累计量化：
                       <span style={{
                         fontWeight: 600,
                         fontSize: '18px',
@@ -812,10 +812,10 @@ const StudentsPageComplete: React.FC = () => {
 
                   <div className={styles.scoresList}>
                     {loading ? (
-                      <Spinner label="加载扣分记录中..." />
+                      <Spinner label="加载量化记录中..." />
                     ) : studentScores.length === 0 ? (
                       <div style={{ textAlign: 'center', padding: '20px', color: tokens.colorNeutralForeground3 }}>
-                        暂无扣分记录
+                        暂无量化记录
                       </div>
                     ) : (
                       studentScores.map((score) => (

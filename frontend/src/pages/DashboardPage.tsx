@@ -16,6 +16,7 @@ import {
   Settings20Regular,
   ArrowUpload20Regular,
   ClockRegular,
+  InfoRegular,
 } from '@fluentui/react-icons';
 import { useAuth } from '../contexts/AuthContext';
 import HomePage from './HomePage';
@@ -26,6 +27,7 @@ import DataImportPage from './DataImportPage';
 import BackupPage from './BackupPage';
 import SettingsPage from './SettingsPage';
 import PendingRecordsPage from './PendingRecordsPage';
+import AboutPage from './AboutPage';
 
 const useStyles = makeStyles({
   container: {
@@ -84,17 +86,18 @@ const DashboardPage: React.FC = () => {
     { path: '/', label: '首页', icon: <Home20Regular /> },
     { path: '/students', label: '学生管理', icon: <People20Regular /> },
     { path: '/teachers', label: '教师管理', icon: <PersonBoard20Regular /> },
-    { path: '/scores', label: '扣分管理', icon: <Trophy20Regular /> },
+    { path: '/scores', label: '量化管理', icon: <Trophy20Regular /> },
     { path: '/pending', label: '待处理记录', icon: <ClockRegular /> },
     { path: '/import', label: '数据导入', icon: <ArrowUpload20Regular /> },
     { path: '/backup', label: '备份恢复', icon: <DatabaseArrowDown20Regular /> },
     { path: '/settings', label: '系统设置', icon: <Settings20Regular /> },
+    { path: '/about', label: '关于', icon: <InfoRegular /> },
   ];
 
   return (
     <div className={styles.container}>
       <header className={styles.header}>
-        <Title2>学生扣分管理系统</Title2>
+        <Title2>学生量化管理系统</Title2>
         <div className={styles.nav}>
           <Body1>欢迎，{user?.username}</Body1>
           <Button appearance="subtle" onClick={logout}>
@@ -133,6 +136,7 @@ const DashboardPage: React.FC = () => {
             <Route path="/import" element={<DataImportPage />} />
             <Route path="/backup" element={<BackupPage />} />
             <Route path="/settings" element={<SettingsPage />} />
+            <Route path="/about" element={<AboutPage />} />
           </Routes>
         </main>
       </div>

@@ -32,7 +32,7 @@ import {
   Combobox,
   Option,
 } from '@fluentui/react-components';
-import { Add20Regular, Delete20Regular, Edit20Regular, Search20Regular, CloudArrowUp20Regular, ArrowDownload20Regular } from '@fluentui/react-icons';
+import { Add20Regular, Delete20Regular, Edit20Regular, Search20Regular, CloudArrowUp20Regular, ArrowDownload20Regular, ArrowUpload20Regular } from '@fluentui/react-icons';
 import { scoreAPI, studentAPI, importExportAPI, userConfigAPI } from '../services/api';
 
 const useStyles = makeStyles({
@@ -169,6 +169,25 @@ const ScoresPageEnhanced: React.FC = () => {
   const [aiErrorDialogOpen, setAiErrorDialogOpen] = useState(false);
   const [aiErrorText, setAiErrorText] = useState('');
   const [aiErrorMessage, setAiErrorMessage] = useState('');
+
+  // 表格导入相关状态
+  const [excelImportOpen, setExcelImportOpen] = useState(false);
+  const [excelFile, setExcelFile] = useState<File | null>(null);
+  const [excelHeaders, setExcelHeaders] = useState<string[]>([]);
+  const [excelPreview, setExcelPreview] = useState<any[]>([]);
+  const [excelMapping, setExcelMapping] = useState({
+    name: '',
+    class: '',
+    studentId: '',
+    reason: '',
+    points: '',
+    teacherName: '',
+    subject: '',
+    date: ''
+  });
+  const [teacherRecords, setTeacherRecords] = useState<any[]>([]);
+  const [teacherDialogOpen, setTeacherDialogOpen] = useState(false);
+  const [selectedTeacherRecords, setSelectedTeacherRecords] = useState<Set<number>>(new Set());
   
   // 查询过滤器
   const [filterStudentName, setFilterStudentName] = useState('');
@@ -205,7 +224,7 @@ const ScoresPageEnhanced: React.FC = () => {
       const response = await scoreAPI.getAll(filters);
       setScores(response.data);
     } catch (err: any) {
-      setError(err.response?.data?.error || '加载扣分记录失败');
+      setError(err.response?.data?.error || '加载量化记录失败');
     } finally {
       setLoading(false);
     }
@@ -351,7 +370,7 @@ const ScoresPageEnhanced: React.FC = () => {
       const systemPrompt = `你是一个数据解析助手，专门将自然语言文本转换为结构化的JSON数据。
 
 任务要求：
-1. 解析用户提供的文本，提取扣分记录信息
+1. 解析用户提供的文本，提取量化记录信息
 2. 每条记录应包含：studentName(学生姓名), class(班级，如无则留空), reason(原因), teacherName(教师姓名), subject(科目，**必须尽力提取**), others(其他信息，如无则留空)
 3. 仅返回JSON数组，不要包含任何其他说明文字
 4. 精确匹配用户输入的信息，others字段填写未被前面几项包含的其他信息
@@ -361,7 +380,7 @@ const ScoresPageEnhanced: React.FC = () => {
 科目提取规则（重要）：
 - **优先级1**: 从文本中直接提取科目信息（如"数学课"、"语文老师"、"英语作业"等）
 - **优先级2**: 根据教师姓名和常见科目组合推断（如"李老师"可能是"数学"，但不确定时留空）
-- **优先级3**: 根据扣分原因推断（如"数学作业未交" → "数学"，"语文默写不合格" → "语文"）
+- **优先级3**: 根据量化原因推断（如"数学作业未交" → "数学"，"语文默写不合格" → "语文"）
 - 如果完全无法确定科目，则subject字段留空
 - 常见科目：语文、数学、英语、物理、化学、生物、政治、历史、地理、体育、音乐、美术、信息技术等
 
@@ -379,7 +398,7 @@ const ScoresPageEnhanced: React.FC = () => {
 
 返回格式示例：
 [{"studentName":"张三","class":"一年级1班","reason":"上课睡觉","teacherName":"李老师","subject":"数学","others":""}]
-[{"studentName":"","class":"三年级2班","reason":"班级卫生不合格","teacherName":"王老师","subject":"","others":"集体扣分"}]
+[{"studentName":"","class":"三年级2班","reason":"班级卫生不合格","teacherName":"王老师","subject":"","others":"集体量化"}]
 [{"studentName":"王五","class":"高二3班","reason":"数学作业未交","teacherName":"刘老师","subject":"数学","others":""}]`;
 
 
@@ -671,6 +690,203 @@ const ScoresPageEnhanced: React.FC = () => {
     setParsedData(newData);
   };
 
+  // 处理Excel文件选择
+  const handleExcelFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setExcelFile(file);
+
+    try {
+      const ExcelJS = await import('exceljs');
+      const workbook = new ExcelJS.Workbook();
+      const buffer = await file.arrayBuffer();
+      await workbook.xlsx.load(buffer);
+
+      const worksheet = workbook.worksheets[0];
+      if (!worksheet) {
+        setError('Excel文件为空');
+        return;
+      }
+
+      // 获取表头
+      const headers: string[] = [];
+      worksheet.getRow(1).eachCell((cell) => {
+        headers.push(cell.text || cell.value?.toString() || '');
+      });
+      setExcelHeaders(headers);
+
+      // 获取预览数据（最多10行）
+      const preview: any[] = [];
+      worksheet.eachRow((row, rowNumber) => {
+        if (rowNumber > 1 && rowNumber <= 11) {
+          const rowData: any = {};
+          row.eachCell((cell, colNumber) => {
+            rowData[headers[colNumber - 1]] = cell.text || cell.value?.toString() || '';
+          });
+          preview.push(rowData);
+        }
+      });
+      setExcelPreview(preview);
+    } catch (err: any) {
+      setError('读取Excel文件失败: ' + err.message);
+    }
+  };
+
+  // 执行Excel导入
+  // 辅助函数：解析和格式化日期为 YYYY-MM-DD
+  const formatDate = (value: any): string => {
+    if (!value) return new Date().toISOString().split('T')[0];
+
+    try {
+      let date: Date;
+
+      // 如果是Date对象
+      if (value instanceof Date) {
+        date = value;
+      }
+      // 如果是Excel序列号（数字）
+      else if (typeof value === 'number') {
+        // Excel日期是从1900年1月1日开始的天数
+        const excelEpoch = new Date(1899, 11, 30);
+        date = new Date(excelEpoch.getTime() + value * 86400000);
+      }
+      // 如果是字符串
+      else if (typeof value === 'string') {
+        const trimmed = value.trim();
+        
+        // 处理 "Tue Oct 21 2025 23:17:41 GMT+0800 (中国标准时间)" 格式
+        if (trimmed.includes('GMT') || trimmed.match(/^\w{3}\s\w{3}\s\d{1,2}/)) {
+          date = new Date(trimmed);
+        }
+        // 处理 YYYY-MM-DD 或 YYYY/MM/DD 等格式
+        else {
+          date = new Date(trimmed);
+        }
+      }
+      // 其他情况，尝试转换
+      else {
+        date = new Date(value);
+      }
+
+      // 验证日期是否有效
+      if (isNaN(date.getTime())) {
+        console.warn('无效的日期值:', value);
+        return new Date().toISOString().split('T')[0];
+      }
+
+      // 格式化为 YYYY-MM-DD
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    } catch (error) {
+      console.error('日期解析失败:', value, error);
+      return new Date().toISOString().split('T')[0];
+    }
+  };
+
+  const handleExcelImport = async () => {
+    if (!excelFile || !excelMapping.name || !excelMapping.reason) {
+      setError('请完成必填字段映射');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const ExcelJS = await import('exceljs');
+      const workbook = new ExcelJS.Workbook();
+      const buffer = await excelFile.arrayBuffer();
+      await workbook.xlsx.load(buffer);
+
+      const worksheet = workbook.worksheets[0];
+      const records: any[] = [];
+
+      worksheet.eachRow((row, rowNumber) => {
+        if (rowNumber > 1) {
+          const record: any = {};
+          row.eachCell((cell, colNumber) => {
+            const header = excelHeaders[colNumber - 1];
+            
+            // 映射到对应字段
+            if (header === excelMapping.name) {
+              record.name = cell.text || cell.value?.toString() || '';
+            }
+            else if (header === excelMapping.class) {
+              record.class = cell.text || cell.value?.toString() || '';
+            }
+            else if (header === excelMapping.studentId) {
+              record.studentId = cell.text || cell.value?.toString() || '';
+            }
+            else if (header === excelMapping.reason) {
+              record.reason = cell.text || cell.value?.toString() || '';
+            }
+            else if (header === excelMapping.points) {
+              const value = cell.text || cell.value?.toString() || '';
+              record.points = parseFloat(value) || 2;
+            }
+            else if (header === excelMapping.teacherName) {
+              record.teacherName = cell.text || cell.value?.toString() || '';
+            }
+            else if (header === excelMapping.subject) {
+              record.subject = cell.text || cell.value?.toString() || '';
+            }
+            else if (header === excelMapping.date) {
+              // 使用formatDate函数处理日期
+              record.date = formatDate(cell.value);
+            }
+          });
+
+          if (record.name && record.reason) {
+            records.push(record);
+          }
+        }
+      });
+
+      // 调用后端导入API
+      const response = await scoreAPI.importRecords(records);
+      const { successCount, teacherRecordCount, teacherRecords: detectedTeachers, pendingCount, errorCount } = response.data;
+
+      if (teacherRecordCount > 0) {
+        // 检测到教师记录，显示二次处理对话框
+        setTeacherRecords(detectedTeachers || []);
+        setTeacherDialogOpen(true);
+        setExcelImportOpen(false);
+      } else {
+        setSuccess(`导入完成！成功 ${successCount} 条，待处理 ${pendingCount} 条，失败 ${errorCount} 条`);
+        setExcelImportOpen(false);
+        loadScores();
+      }
+    } catch (err: any) {
+      setError(err.response?.data?.error || '导入失败');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 处理教师记录
+  const handleProcessTeacherRecords = async (action: 'teacher' | 'student' | 'discard') => {
+    if (selectedTeacherRecords.size === 0) {
+      setError('请选择要处理的记录');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const records = Array.from(selectedTeacherRecords).map(index => teacherRecords[index]);
+      await scoreAPI.processTeacherRecords(records, action);
+      
+      setSuccess(`已${action === 'discard' ? '舍弃' : '导入'} ${records.length} 条记录`);
+      setTeacherDialogOpen(false);
+      setSelectedTeacherRecords(new Set());
+      loadScores();
+    } catch (err: any) {
+      setError(err.response?.data?.error || '处理失败');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // 处理AI错误：重试解析
   const handleAiErrorRetry = () => {
     setAiErrorDialogOpen(false);
@@ -798,7 +1014,7 @@ const ScoresPageEnhanced: React.FC = () => {
     }
   };
 
-  // 导出扣分数据
+  // 导出量化数据
   const handleExportScores = async () => {
     try {
       const response = await importExportAPI.exportScoresExcel();
@@ -808,7 +1024,7 @@ const ScoresPageEnhanced: React.FC = () => {
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `扣分记录_${new Date().toISOString().split('T')[0]}.xlsx`;
+      link.download = `量化记录_${new Date().toISOString().split('T')[0]}.xlsx`;
       link.click();
       window.URL.revokeObjectURL(url);
       setSuccess('导出成功！');
@@ -866,10 +1082,10 @@ const ScoresPageEnhanced: React.FC = () => {
     try {
       if (editingScore) {
         await scoreAPI.update(editingScore.id, data);
-        setSuccess('扣分记录更新成功');
+        setSuccess('量化记录更新成功');
       } else {
         await scoreAPI.create(data);
-        setSuccess('扣分记录添加成功');
+        setSuccess('量化记录添加成功');
       }
       setDialogOpen(false);
       loadScores();
@@ -879,13 +1095,13 @@ const ScoresPageEnhanced: React.FC = () => {
   };
 
   const handleDelete = async (id: number) => {
-    if (!confirm('确定要删除这条扣分记录吗？')) {
+    if (!confirm('确定要删除这条量化记录吗？')) {
       return;
     }
 
     try {
       await scoreAPI.delete(id);
-      setSuccess('扣分记录删除成功');
+      setSuccess('量化记录删除成功');
       loadScores();
     } catch (err: any) {
       setError(err.response?.data?.error || '删除失败');
@@ -964,7 +1180,7 @@ const ScoresPageEnhanced: React.FC = () => {
     }),
     createTableColumn<Score>({
       columnId: 'points',
-      renderHeaderCell: () => '扣分',
+      renderHeaderCell: () => '量化',
       renderCell: (score) => score.points,
     }),
     createTableColumn<Score>({
@@ -1009,7 +1225,7 @@ const ScoresPageEnhanced: React.FC = () => {
   return (
     <div className={styles.container}>
       <div className={styles.header}>
-        <Title2>扣分管理</Title2>
+        <Title2>量化管理</Title2>
         <div className={styles.headerButtons}>
           <Button
             appearance="subtle"
@@ -1023,7 +1239,7 @@ const ScoresPageEnhanced: React.FC = () => {
             icon={<Add20Regular />}
             onClick={() => handleOpenDialog()}
           >
-            添加扣分记录
+            添加量化记录
           </Button>
           <Button
             appearance="secondary"
@@ -1031,6 +1247,13 @@ const ScoresPageEnhanced: React.FC = () => {
             onClick={() => setAiDialogOpen(true)}
           >
             AI 批量导入
+          </Button>
+          <Button
+            appearance="secondary"
+            icon={<ArrowUpload20Regular />}
+            onClick={() => setExcelImportOpen(true)}
+          >
+            表格导入
           </Button>
         </div>
       </div>
@@ -1059,7 +1282,7 @@ const ScoresPageEnhanced: React.FC = () => {
       {/* 数据录入选项卡 */}
       {selectedTab === 'entry' && (
         <div style={{ marginTop: '20px' }}>
-          <Title3>扣分录入</Title3>
+          <Title3>量化录入</Title3>
 
           {loading ? (
             <Spinner label="加载中..." />
@@ -1092,7 +1315,7 @@ const ScoresPageEnhanced: React.FC = () => {
       {/* 数据查询选项卡 */}
       {selectedTab === 'query' && (
         <div style={{ marginTop: '20px' }}>
-          <Title3>扣分查询</Title3>
+          <Title3>量化查询</Title3>
           
           <div className={styles.filters}>
             <div className={styles.filterItem}>
@@ -1169,7 +1392,7 @@ const ScoresPageEnhanced: React.FC = () => {
       {/* 数据统计选项卡 */}
       {selectedTab === 'statistics' && (
         <div style={{ marginTop: '20px' }}>
-          <Title3>扣分统计</Title3>
+          <Title3>量化统计</Title3>
           
           <div style={{ marginTop: '20px', marginBottom: '20px' }}>
             <Label required>选择学生</Label>
@@ -1212,26 +1435,26 @@ const ScoresPageEnhanced: React.FC = () => {
               </Card>
               <Card className={styles.statsCard}>
                 <Title2>{statistics.total_points}</Title2>
-                <div>累计扣分</div>
+                <div>累计量化</div>
               </Card>
               <Card className={styles.statsCard}>
                 <Title2>{statistics.average_points.toFixed(2)}</Title2>
-                <div>平均扣分</div>
+                <div>平均量化</div>
               </Card>
               <Card className={styles.statsCard}>
                 <Title2>{statistics.max_points}</Title2>
-                <div>最高扣分</div>
+                <div>最高量化</div>
               </Card>
               <Card className={styles.statsCard}>
                 <Title2>{statistics.min_points}</Title2>
-                <div>最低扣分</div>
+                <div>最低量化</div>
               </Card>
             </div>
           )}
 
           {!statistics && selectedStudentForStats && (
             <div style={{ textAlign: 'center', padding: '40px', color: '#666' }}>
-              该学生暂无扣分记录
+              该学生暂无量化记录
             </div>
           )}
 
@@ -1247,7 +1470,7 @@ const ScoresPageEnhanced: React.FC = () => {
       <Dialog open={dialogOpen} onOpenChange={(_, data) => setDialogOpen(data.open)}>
         <DialogSurface>
           <DialogBody>
-            <DialogTitle>{editingScore ? '编辑扣分记录' : '添加扣分记录'}</DialogTitle>
+            <DialogTitle>{editingScore ? '编辑量化记录' : '添加量化记录'}</DialogTitle>
             <DialogContent>
               <div className={styles.form}>
                 <div>
@@ -1290,7 +1513,7 @@ const ScoresPageEnhanced: React.FC = () => {
                 </div>
 
                 <div>
-                  <Label required>扣分</Label>
+                  <Label required>量化</Label>
                   <Input
                     type="number"
                     value={formData.points}
@@ -1305,7 +1528,7 @@ const ScoresPageEnhanced: React.FC = () => {
                   <Input
                     value={formData.reason}
                     onChange={(e) => setFormData({ ...formData, reason: e.target.value })}
-                    placeholder="请输入扣分事由"
+                    placeholder="请输入量化事由"
                     required
                   />
                 </div>
@@ -1359,7 +1582,7 @@ const ScoresPageEnhanced: React.FC = () => {
             <DialogContent style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               {/* 文本输入区 - 更大 */}
               <div>
-                <Label weight="semibold" size="large">粘贴包含扣分信息的文本</Label>
+                <Label weight="semibold" size="large">粘贴包含量化信息的文本</Label>
                 <Textarea
                   ref={aiTextAreaRef}
                   resize="vertical"
@@ -1375,7 +1598,7 @@ const ScoresPageEnhanced: React.FC = () => {
                   }}
                   value={aiText}
                   onChange={(e) => setAiText(e.target.value)}
-                  placeholder="示例格式：&#10;张三 高一(1)班 课堂表现优秀 +5分 李老师&#10;李四 20240002 高一(2)班 作业认真 +3分 王老师&#10;王五 迟到 -2分&#10;&#10;支持多种格式，AI 会智能识别学生姓名、班级、扣分、事由等信息"
+                  placeholder="示例格式：&#10;张三 高一(1)班 课堂表现优秀 +5分 李老师&#10;李四 20240002 高一(2)班 作业认真 +3分 王老师&#10;王五 迟到 -2分&#10;&#10;支持多种格式，AI 会智能识别学生姓名、班级、量化、事由等信息"
                   disabled={aiParsing}
                 />
               </div>
@@ -1416,7 +1639,7 @@ const ScoresPageEnhanced: React.FC = () => {
                           <th style={{ padding: '8px', textAlign: 'left' }}>学生</th>
                           <th style={{ padding: '8px', textAlign: 'left' }}>学号</th>
                           <th style={{ padding: '8px', textAlign: 'left' }}>班级</th>
-                          <th style={{ padding: '8px', textAlign: 'left' }}>扣分</th>
+                          <th style={{ padding: '8px', textAlign: 'left' }}>量化</th>
                           <th style={{ padding: '8px', textAlign: 'left' }}>事由</th>
                           <th style={{ padding: '8px', textAlign: 'left' }}>教师</th>
                           <th style={{ padding: '8px', textAlign: 'center' }}>状态</th>
@@ -1732,6 +1955,224 @@ const ScoresPageEnhanced: React.FC = () => {
               >
                 保存配置
               </Button>
+            </DialogActions>
+          </DialogBody>
+        </DialogSurface>
+      </Dialog>
+
+      {/* Excel表格导入对话框 */}
+      <Dialog open={excelImportOpen} onOpenChange={(_, data) => setExcelImportOpen(data.open)}>
+        <DialogSurface style={{ maxWidth: '900px' }}>
+          <DialogBody>
+            <DialogTitle>表格导入</DialogTitle>
+            <DialogContent style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div>
+                <Label weight="semibold">1. 选择Excel文件</Label>
+                <Input
+                  type="file"
+                  accept=".xlsx,.xls"
+                  onChange={handleExcelFileChange}
+                />
+              </div>
+
+              {excelHeaders.length > 0 && (
+                <>
+                  <div>
+                    <Label weight="semibold">2. 字段映射</Label>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginTop: '8px' }}>
+                      <div>
+                        <Label required>姓名</Label>
+                        <Select value={excelMapping.name} onChange={(_, data) => setExcelMapping({ ...excelMapping, name: data.value })}>
+                          <option value="">请选择</option>
+                          {excelHeaders.map(h => <option key={h} value={h}>{h}</option>)}
+                        </Select>
+                      </div>
+                      <div>
+                        <Label>班级</Label>
+                        <Select value={excelMapping.class} onChange={(_, data) => setExcelMapping({ ...excelMapping, class: data.value })}>
+                          <option value="">请选择</option>
+                          {excelHeaders.map(h => <option key={h} value={h}>{h}</option>)}
+                        </Select>
+                      </div>
+                      <div>
+                        <Label>学号</Label>
+                        <Select value={excelMapping.studentId} onChange={(_, data) => setExcelMapping({ ...excelMapping, studentId: data.value })}>
+                          <option value="">请选择</option>
+                          {excelHeaders.map(h => <option key={h} value={h}>{h}</option>)}
+                        </Select>
+                      </div>
+                      <div>
+                        <Label required>事由</Label>
+                        <Select value={excelMapping.reason} onChange={(_, data) => setExcelMapping({ ...excelMapping, reason: data.value })}>
+                          <option value="">请选择</option>
+                          {excelHeaders.map(h => <option key={h} value={h}>{h}</option>)}
+                        </Select>
+                      </div>
+                      <div>
+                        <Label>分数</Label>
+                        <Select value={excelMapping.points} onChange={(_, data) => setExcelMapping({ ...excelMapping, points: data.value })}>
+                          <option value="">请选择（默认2分）</option>
+                          {excelHeaders.map(h => <option key={h} value={h}>{h}</option>)}
+                        </Select>
+                      </div>
+                      <div>
+                        <Label>教师</Label>
+                        <Select value={excelMapping.teacherName} onChange={(_, data) => setExcelMapping({ ...excelMapping, teacherName: data.value })}>
+                          <option value="">请选择</option>
+                          {excelHeaders.map(h => <option key={h} value={h}>{h}</option>)}
+                        </Select>
+                      </div>
+                      <div>
+                        <Label>科目</Label>
+                        <Select value={excelMapping.subject} onChange={(_, data) => setExcelMapping({ ...excelMapping, subject: data.value })}>
+                          <option value="">请选择</option>
+                          {excelHeaders.map(h => <option key={h} value={h}>{h}</option>)}
+                        </Select>
+                      </div>
+                      <div>
+                        <Label>日期</Label>
+                        <Select value={excelMapping.date} onChange={(_, data) => setExcelMapping({ ...excelMapping, date: data.value })}>
+                          <option value="">请选择（默认今天）</option>
+                          {excelHeaders.map(h => <option key={h} value={h}>{h}</option>)}
+                        </Select>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <Label weight="semibold">3. 数据预览（前10行）</Label>
+                    <Card style={{ maxHeight: '300px', overflow: 'auto', marginTop: '8px' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                        <thead>
+                          <tr style={{ borderBottom: '2px solid' }}>
+                            {excelHeaders.map(h => <th key={h} style={{ padding: '8px', textAlign: 'left' }}>{h}</th>)}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {excelPreview.map((row, idx) => (
+                            <tr key={idx} style={{ borderBottom: '1px solid #eee' }}>
+                              {excelHeaders.map(h => <td key={h} style={{ padding: '8px' }}>{row[h] || '-'}</td>)}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </Card>
+                  </div>
+                </>
+              )}
+            </DialogContent>
+            <DialogActions>
+              <Button appearance="secondary" onClick={() => setExcelImportOpen(false)}>
+                取消
+              </Button>
+              <Button 
+                appearance="primary" 
+                onClick={handleExcelImport}
+                disabled={!excelMapping.name || !excelMapping.reason}
+              >
+                开始导入
+              </Button>
+            </DialogActions>
+          </DialogBody>
+        </DialogSurface>
+      </Dialog>
+
+      {/* 教师记录处理对话框 */}
+      <Dialog open={teacherDialogOpen} onOpenChange={(_, data) => setTeacherDialogOpen(data.open)}>
+        <DialogSurface style={{ maxWidth: '900px' }}>
+          <DialogBody>
+            <DialogTitle>检测到教师记录 - 请选择处理方式</DialogTitle>
+            <DialogContent style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <MessageBar intent="warning">
+                <MessageBarBody>
+                  检测到 {teacherRecords.length} 条教师姓名记录，请选择要处理的记录并决定处理方式
+                </MessageBarBody>
+              </MessageBar>
+
+              <Card style={{ maxHeight: '400px', overflow: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                  <thead>
+                    <tr style={{ borderBottom: '2px solid' }}>
+                      <th style={{ padding: '8px', width: '40px' }}>
+                        <input
+                          type="checkbox"
+                          checked={selectedTeacherRecords.size === teacherRecords.length}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedTeacherRecords(new Set(teacherRecords.map((_, i) => i)));
+                            } else {
+                              setSelectedTeacherRecords(new Set());
+                            }
+                          }}
+                        />
+                      </th>
+                      <th style={{ padding: '8px', textAlign: 'left' }}>姓名</th>
+                      <th style={{ padding: '8px', textAlign: 'left' }}>班级</th>
+                      <th style={{ padding: '8px', textAlign: 'left' }}>事由</th>
+                      <th style={{ padding: '8px', textAlign: 'left' }}>分数</th>
+                      <th style={{ padding: '8px', textAlign: 'left' }}>科目</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {teacherRecords.map((record, index) => (
+                      <tr key={index} style={{ borderBottom: '1px solid #eee' }}>
+                        <td style={{ padding: '8px' }}>
+                          <input
+                            type="checkbox"
+                            checked={selectedTeacherRecords.has(index)}
+                            onChange={(e) => {
+                              const newSet = new Set(selectedTeacherRecords);
+                              if (e.target.checked) {
+                                newSet.add(index);
+                              } else {
+                                newSet.delete(index);
+                              }
+                              setSelectedTeacherRecords(newSet);
+                            }}
+                          />
+                        </td>
+                        <td style={{ padding: '8px', fontWeight: '600' }}>{record.name}</td>
+                        <td style={{ padding: '8px' }}>{record.class || '-'}</td>
+                        <td style={{ padding: '8px' }}>{record.reason || '-'}</td>
+                        <td style={{ padding: '8px' }}>{record.points || 2}</td>
+                        <td style={{ padding: '8px' }}>{record.subject || '-'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </Card>
+
+              <div style={{ fontSize: '13px', color: '#666' }}>
+                已选择 {selectedTeacherRecords.size} 条记录
+              </div>
+            </DialogContent>
+            <DialogActions style={{ display: 'flex', gap: '8px', justifyContent: 'space-between' }}>
+              <Button appearance="secondary" onClick={() => setTeacherDialogOpen(false)}>
+                取消
+              </Button>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <Button 
+                  appearance="secondary" 
+                  onClick={() => handleProcessTeacherRecords('discard')}
+                  disabled={selectedTeacherRecords.size === 0}
+                >
+                  舍弃选中
+                </Button>
+                <Button 
+                  appearance="primary" 
+                  onClick={() => handleProcessTeacherRecords('student')}
+                  disabled={selectedTeacherRecords.size === 0}
+                >
+                  导入为学生量化
+                </Button>
+                <Button 
+                  appearance="primary" 
+                  onClick={() => handleProcessTeacherRecords('teacher')}
+                  disabled={selectedTeacherRecords.size === 0}
+                >
+                  导入为教师量化
+                </Button>
+              </div>
             </DialogActions>
           </DialogBody>
         </DialogSurface>

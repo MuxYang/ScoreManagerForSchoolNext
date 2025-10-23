@@ -16,6 +16,7 @@ import db, { initializeDatabase, createDefaultAdmin } from './models/database';
 import logger from './utils/logger';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
 import { initializeServerSessionId } from './utils/cookieEncryption';
+import { validateOneTimeToken } from './middleware/tokenValidator';
 
 // 导入路由
 import authRoutes from './routes/auth';
@@ -28,7 +29,7 @@ import userConfigRoutes from './routes/userConfig';
 
 const app = express();
 const PORT = parseInt(process.env.PORT || '3000', 10);
-const HOST = process.env.HOST || '127.0.0.1';
+const HOST = process.env.HOST || '0.0.0.0'; // 允许局域网连接
 
 // Initialize server session ID (generates new one on each startup)
 const sessionId = initializeServerSessionId();
@@ -49,20 +50,71 @@ try {
   process.exit(1);
 }
 
+// 局域网访问限制中间件
+app.use((req, res, next) => {
+  const clientIp = req.ip || req.connection.remoteAddress || '';
+  const ip = clientIp.replace(/^::ffff:/, ''); // 移除IPv6前缀
+  
+  // 允许的IP范围：
+  // - 127.0.0.1 (localhost)
+  // - 10.0.0.0 - 10.255.255.255 (A类私有地址)
+  // - 172.16.0.0 - 172.31.255.255 (B类私有地址)
+  // - 192.168.0.0 - 192.168.255.255 (C类私有地址)
+  // - ::1 (IPv6 localhost)
+  // - fe80::/10 (IPv6 link-local)
+  
+  const isLocalhost = ip === '127.0.0.1' || ip === 'localhost' || ip === '::1';
+  const isPrivateNetwork = 
+    /^10\./.test(ip) ||
+    /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(ip) ||
+    /^192\.168\./.test(ip) ||
+    /^fe80:/i.test(ip);
+  
+  if (!isLocalhost && !isPrivateNetwork) {
+    logger.warn('拒绝公网IP访问', { ip, path: req.path });
+    return res.status(403).json({ 
+      error: '此服务仅允许局域网访问' 
+    });
+  }
+  
+  next();
+});
+
 // Security middleware
 app.use(helmet());
 
-// CORS configuration - localhost only
-const allowedOrigins = (process.env.ALLOWED_ORIGINS || 'http://localhost:5173').split(',');
+// CORS configuration - allow all LAN origins
 app.use(cors({
   origin: (origin, callback) => {
-    // Allow requests without origin (e.g., Postman)
+    // Allow requests without origin (e.g., Postman, mobile apps)
     if (!origin) return callback(null, true);
     
-    if (allowedOrigins.indexOf(origin) !== -1) {
-      callback(null, true);
-    } else {
-      callback(new Error('CORS origin not allowed'));
+    try {
+      const url = new URL(origin);
+      const hostname = url.hostname;
+      
+      // 允许localhost
+      if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1') {
+        return callback(null, true);
+      }
+      
+      // 允许所有局域网IP
+      const isPrivateNetwork = 
+        /^10\./.test(hostname) ||
+        /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(hostname) ||
+        /^192\.168\./.test(hostname) ||
+        /^fe80:/i.test(hostname);
+      
+      if (isPrivateNetwork) {
+        return callback(null, true);
+      }
+      
+      // 拒绝其他来源
+      logger.warn('CORS: 拒绝非局域网源', { origin });
+      callback(new Error('仅允许局域网访问'));
+    } catch (error) {
+      logger.error('CORS: URL解析失败', { origin, error });
+      callback(new Error('无效的请求源'));
     }
   },
   credentials: true // Allow sending cookies
@@ -101,6 +153,9 @@ app.use((req, res, next) => {
   next();
 });
 
+// 一次性token验证中间件（应用于所有API路由）
+app.use('/api', validateOneTimeToken);
+
 // 健康检查
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
@@ -121,14 +176,14 @@ app.use(notFoundHandler);
 // 错误处理
 app.use(errorHandler);
 
-// Start server - localhost only
+// Start server - LAN access allowed
 const server = app.listen(PORT, HOST, () => {
   // Only log to file, not to console
   logger.info(`Server running at http://${HOST}:${PORT}`);
-  logger.info('Localhost access only (localhost/127.0.0.1)');
+  logger.info('LAN access allowed (localhost + private networks)');
   
   // Console shows startup message and frontend URL
-  console.log('OK Backend service started');
+  console.log('OK Backend service started (LAN access enabled)');
   console.log(`Frontend URL: ${process.env.FRONTEND_URL || 'http://localhost:5173'}`);
 });
 

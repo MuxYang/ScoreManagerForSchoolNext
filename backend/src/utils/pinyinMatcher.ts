@@ -180,7 +180,7 @@ export function normalizeTeachingClasses(classesStr: string): string {
 }
 
 /**
- * 智能匹配学生信息（用于AI导入扣分记录）
+ * 智能匹配学生信息（用于AI导入量化记录）
  * 严格模式：必须同时匹配姓名拼音和班级，否则返回未匹配
  * @param db 数据库连接
  * @param name 学生姓名

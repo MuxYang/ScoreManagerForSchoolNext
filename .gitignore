@@ -52,3 +52,7 @@ node_modules/
 *.sqlite
 *.db
 *.bak
+
+#Another version
+
+Avalonia ver/
