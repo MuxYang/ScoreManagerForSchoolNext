@@ -27,7 +27,7 @@ router.post('/save', authenticateToken, (req: Request, res: Response) => {
     });
     
     const authReq = req as AuthRequest;
-    logger.info('用户配置已保存', { userId: authReq.userId });
+    logger.info('User config saved', { userId: authReq.userId });
     
     res.json({ 
       success: true, 
@@ -35,7 +35,7 @@ router.post('/save', authenticateToken, (req: Request, res: Response) => {
       encryptedConfig // 也返回加密字符串供前端存储备份
     });
   } catch (error: any) {
-    logger.error('保存用户配置失败:', error);
+    logger.error('Failed to save user config:', error);
     res.status(500).json({ error: '保存配置失败' });
   }
 });
@@ -61,7 +61,7 @@ router.get('/get', authenticateToken, (req: Request, res: Response) => {
       config 
     });
   } catch (error: any) {
-    logger.error('获取用户配置失败:', error);
+    logger.error('Failed to get user config:', error);
     res.status(500).json({ error: '获取配置失败' });
   }
 });
@@ -72,14 +72,14 @@ router.post('/clear', authenticateToken, (req: Request, res: Response) => {
     res.clearCookie('user_config', { path: '/' });
     
     const authReq = req as AuthRequest;
-    logger.info('用户配置已清除', { userId: authReq.userId });
+    logger.info('User config cleared', { userId: authReq.userId });
     
     res.json({ 
       success: true, 
       message: '配置已清除' 
     });
   } catch (error: any) {
-    logger.error('清除用户配置失败:', error);
+    logger.error('Failed to clear user config:', error);
     res.status(500).json({ error: '清除配置失败' });
   }
 });

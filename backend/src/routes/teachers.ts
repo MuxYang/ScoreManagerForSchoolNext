@@ -60,8 +60,8 @@ router.get('/:id', authenticateToken, (req: Request, res: Response) => {
     
     res.json(teacher);
   } catch (error: any) {
-    logger.error('获取教师信息失败', { error: error.message });
-    res.status(500).json({ error: '获取教师信息失败' });
+    logger.error('Failed to get teacher info', { error: error.message });
+    res.status(500).json({ error: 'Failed to get teacher info' });
   }
 });
 
@@ -77,20 +77,20 @@ router.post('/', authenticateToken, (req: Request, res: Response) => {
     // 安全检查
     const nameValidation = validateInput(name, { maxLength: 50 });
     if (!nameValidation.valid) {
-      logger.warn('添加教师被阻止：姓名包含非法字符', { name });
+      logger.warn('Add teacher blocked: Name contains illegal characters', { name });
       return res.status(400).json({ error: '姓名包含非法字符' });
     }
 
     const subjectValidation = validateInput(subject, { maxLength: 50 });
     if (!subjectValidation.valid) {
-      logger.warn('添加教师被阻止：科目包含非法字符', { subject });
+      logger.warn('Add teacher blocked: Subject contains illegal characters', { subject });
       return res.status(400).json({ error: '科目包含非法字符' });
     }
 
     if (phone) {
       const phoneValidation = validateInput(phone, { maxLength: 20 });
       if (!phoneValidation.valid) {
-        logger.warn('添加教师被阻止：电话包含非法字符', { phone });
+        logger.warn('Add teacher blocked: Phone contains illegal characters', { phone });
         return res.status(400).json({ error: '电话包含非法字符' });
       }
     }
@@ -98,7 +98,7 @@ router.post('/', authenticateToken, (req: Request, res: Response) => {
     if (email) {
       const emailValidation = validateInput(email, { maxLength: 100 });
       if (!emailValidation.valid) {
-        logger.warn('添加教师被阻止：邮箱包含非法字符', { email });
+        logger.warn('Add teacher blocked: Email contains illegal characters', { email });
         return res.status(400).json({ error: '邮箱包含非法字符' });
       }
     }
@@ -108,7 +108,7 @@ router.post('/', authenticateToken, (req: Request, res: Response) => {
     ).run(name, subject, phone || null, email || null);
     
     const authReq = req as AuthRequest;
-    logger.info('教师创建成功', { 
+    logger.info('Teacher created successfully', { 
       teacherId: result.lastInsertRowid, 
       name,
       userId: authReq.userId 
@@ -122,8 +122,8 @@ router.post('/', authenticateToken, (req: Request, res: Response) => {
       email
     });
   } catch (error: any) {
-    logger.error('创建教师失败', { error: error.message });
-    res.status(500).json({ error: '创建教师失败' });
+    logger.error('Failed to create teacher', { error: error.message });
+    res.status(500).json({ error: 'Failed to create teacher' });
   }
 });
 
@@ -145,7 +145,7 @@ router.put('/:id', authenticateToken, (req: Request, res: Response) => {
     }
     
     const authReq = req as AuthRequest;
-    logger.info('教师信息更新成功', { 
+    logger.info('Teacher info updated successfully', { 
       teacherId: req.params.id,
       userId: authReq.userId 
     });
@@ -158,8 +158,8 @@ router.put('/:id', authenticateToken, (req: Request, res: Response) => {
       email
     });
   } catch (error: any) {
-    logger.error('更新教师信息失败', { error: error.message });
-    res.status(500).json({ error: '更新教师信息失败' });
+    logger.error('Failed to update teacher info', { error: error.message });
+    res.status(500).json({ error: 'Failed to update teacher info' });
   }
 });
 
@@ -173,19 +173,19 @@ router.delete('/:id', authenticateToken, (req: Request, res: Response) => {
     }
     
     const authReq = req as AuthRequest;
-    logger.info('教师删除成功', { 
+    logger.info('Teacher deleted successfully', { 
       teacherId: req.params.id,
       userId: authReq.userId 
     });
     
-    res.json({ message: '教师删除成功' });
+    res.json({ message: 'Teacher deleted successfully' });
   } catch (error: any) {
-    logger.error('删除教师失败', { error: error.message });
-    res.status(500).json({ error: '删除教师失败' });
+    logger.error('Failed to delete teacher', { error: error.message });
+    res.status(500).json({ error: 'Failed to delete teacher' });
   }
 });
 
-// 导出教师量化记录
+// Export teacher quantification records
 router.post('/export-records', authenticateToken, async (req: Request, res: Response) => {
   try {
     const { startDate, endDate } = req.body;
@@ -194,7 +194,7 @@ router.post('/export-records', authenticateToken, async (req: Request, res: Resp
       return res.status(400).json({ error: '请提供开始日期和结束日期' });
     }
 
-    logger.info('导出教师量化记录', { startDate, endDate });
+    logger.info('Export teacher quantification records', { startDate, endDate });
 
     // 获取所有教师及其科目
     const teachers = db.prepare(`
@@ -312,9 +312,9 @@ router.post('/export-records', authenticateToken, async (req: Request, res: Resp
     await workbook.xlsx.write(res);
     res.end();
 
-    logger.info('教师量化记录导出成功', { startDate, endDate });
+    logger.info('Teacher quantification records exported successfully', { startDate, endDate });
   } catch (error: any) {
-    logger.error('导出教师量化记录失败', { error: error.message });
+    logger.error('Export teacher quantification records失败', { error: error.message });
     res.status(500).json({ error: '导出失败: ' + error.message });
   }
 });

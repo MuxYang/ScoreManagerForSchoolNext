@@ -20,6 +20,7 @@ import {
   sanitizeForLogging
 } from '../utils/inputValidation';
 import { generateOneTimeToken } from '../utils/oneTimeToken';
+import { normalizeIp } from '../utils/ipHelper';
 
 const router = express.Router();
 
@@ -29,7 +30,7 @@ router.get('/token', (req: Request, res: Response) => {
     const token = generateOneTimeToken();
     res.json({ token });
   } catch (error) {
-    logger.error('生成token失败:', error);
+    logger.error('Failed to generate token:', error);
     res.status(500).json({ error: '生成token失败' });
   }
 });
@@ -58,8 +59,8 @@ const loginLimiter = rateLimit({
   standardHeaders: true, // 返回 RateLimit-* 响应头
   legacyHeaders: false,
   handler: (req, res) => {
-    logger.warn('登录速率限制触发', { 
-      ip: req.ip,
+    logger.warn('Login rate limit triggered', { 
+      ip: normalizeIp(req),
       userAgent: req.headers['user-agent']
     });
     res.status(429).json({ 
@@ -76,7 +77,7 @@ const passwordResetLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   handler: (req, res) => {
-    logger.warn('密码重置速率限制触发', { ip: req.ip });
+    logger.warn('Password reset rate limit triggered', { ip: normalizeIp(req) });
     res.status(429).json({ 
       error: '密码重置尝试次数过多，请1小时后再试' 
     });
@@ -179,9 +180,9 @@ router.post('/login', loginLimiter, async (req: Request, res: Response) => {
     // 安全检查
     const inputValidation = validateInput(username, { maxLength: 20 });
     if (!inputValidation.valid) {
-      logger.warn('登录尝试被阻止：检测到恶意输入', { 
+      logger.warn('Login attempt blocked: Malicious input detected', { 
         usernameHash: sanitizeForLogging(username, { type: 'hash' }),
-        ip: req.ip
+        ip: normalizeIp(req)
       });
       return res.status(400).json({ error: '输入包含非法字符' });
     }
@@ -222,11 +223,11 @@ router.post('/login', loginLimiter, async (req: Request, res: Response) => {
 
     // Log the action
     db.prepare('INSERT INTO logs (user_id, action, ip_address) VALUES (?, ?, ?)')
-      .run(user.id, 'LOGIN', req.ip);
+      .run(user.id, 'LOGIN', normalizeIp(req));
 
     logger.info('User login successful', { username, userId: user.id });
 
-    // 提取浏览器指纹
+    // Extract browser fingerprint
     const userAgent = req.headers['user-agent'] || '';
     const acceptLanguage = req.headers['accept-language'];
     const browserFingerprint = extractBrowserFingerprint(userAgent, acceptLanguage);
@@ -426,7 +427,7 @@ router.post('/verify-cookie', async (req: Request, res: Response) => {
       return res.status(400).json({ error: '未提供 Cookie 数据', code: 'NO_COOKIE' });
     }
 
-    // 解密 Cookie
+    // Decrypt Cookie
     const cookieData = decryptCookie(encryptedCookie);
     if (!cookieData) {
       logger.warn('Auto-login failed: cookie decryption failed');
@@ -495,7 +496,7 @@ router.post('/verify-cookie', async (req: Request, res: Response) => {
 
     // 记录日志
     db.prepare('INSERT INTO logs (user_id, action, ip_address) VALUES (?, ?, ?)')
-      .run(user.id, 'AUTO_LOGIN', req.ip);
+      .run(user.id, 'AUTO_LOGIN', normalizeIp(req));
 
     logger.info('Cookie auto-login successful', { 
       username: user.username, 

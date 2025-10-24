@@ -1,21 +1,22 @@
 import { Request, Response, NextFunction } from 'express';
 import logger from '../utils/logger';
+import { normalizeIp } from '../utils/ipHelper';
 
 export function errorHandler(err: Error, req: Request, res: Response, next: NextFunction) {
-  logger.error('错误:', {
+  logger.error('Error:', {
     message: err.message,
     stack: err.stack,
     path: req.path,
     method: req.method,
-    ip: req.ip,
+    ip: normalizeIp(req),
   });
 
   res.status(500).json({
-    error: '服务器内部错误',
+    error: 'Internal server error',
     message: process.env.NODE_ENV === 'development' ? err.message : undefined,
   });
 }
 
 export function notFoundHandler(req: Request, res: Response) {
-  res.status(404).json({ error: '未找到请求的资源' });
+  res.status(404).json({ error: 'Resource not found' });
 }

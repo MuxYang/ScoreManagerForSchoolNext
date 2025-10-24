@@ -35,7 +35,7 @@ router.get('/:id', authenticateToken, (req: Request, res: Response) => {
     }
     res.json(student);
   } catch (error) {
-    logger.error('获取学生信息失败:', error);
+    logger.error('Failed to get student info:', error);
     res.status(500).json({ error: '获取学生信息失败' });
   }
 });
@@ -52,7 +52,7 @@ router.post('/', authenticateToken, (req: Request, res: Response) => {
     // 安全检查：学号、姓名、班级
     const studentIdValidation = validateInput(studentId, { maxLength: 50 });
     if (!studentIdValidation.valid) {
-      logger.warn('添加学生被阻止：学号包含非法字符', { 
+      logger.warn('Add student blocked: Student ID contains illegal characters', { 
         studentIdHash: sanitizeForLogging(studentId, { type: 'hash' }),
         ip: (req as any).ip
       });
@@ -61,7 +61,7 @@ router.post('/', authenticateToken, (req: Request, res: Response) => {
 
     const nameValidation = validateInput(name, { maxLength: 50 });
     if (!nameValidation.valid) {
-      logger.warn('添加学生被阻止：姓名包含非法字符', { 
+      logger.warn('Add student blocked: Name contains illegal characters', { 
         nameHash: sanitizeForLogging(name, { type: 'hash' }),
         ip: (req as any).ip
       });
@@ -70,7 +70,7 @@ router.post('/', authenticateToken, (req: Request, res: Response) => {
 
     const classValidation = validateInput(studentClass, { maxLength: 50 });
     if (!classValidation.valid) {
-      logger.warn('添加学生被阻止：班级包含非法字符', { 
+      logger.warn('Add student blocked: Class contains illegal characters', { 
         classHash: sanitizeForLogging(studentClass, { type: 'hash' }),
         ip: (req as any).ip
       });
@@ -86,7 +86,7 @@ router.post('/', authenticateToken, (req: Request, res: Response) => {
     db.prepare('INSERT INTO logs (user_id, action, details) VALUES (?, ?, ?)')
       .run(authReq.userId, 'ADD_STUDENT', JSON.stringify({ studentId, name, studentClass }));
 
-    logger.info('添加学生成功', { studentId, name });
+    logger.info('Student added successfully', { studentId, name });
 
     res.status(201).json({ 
       id: result.lastInsertRowid,
@@ -96,7 +96,7 @@ router.post('/', authenticateToken, (req: Request, res: Response) => {
     if (error.code === 'SQLITE_CONSTRAINT') {
       return res.status(400).json({ error: '学号已存在' });
     }
-    logger.error('添加学生失败:', error);
+    logger.error('Failed to add student:', error);
     res.status(500).json({ error: '添加学生失败' });
   }
 });
@@ -120,11 +120,11 @@ router.put('/:id', authenticateToken, (req: Request, res: Response) => {
     db.prepare('INSERT INTO logs (user_id, action, details) VALUES (?, ?, ?)')
       .run(authReq.userId, 'UPDATE_STUDENT', JSON.stringify({ id: req.params.id, studentId, name, studentClass }));
 
-    logger.info('更新学生成功', { id: req.params.id });
+    logger.info('Student updated successfully', { id: req.params.id });
 
     res.json({ message: '学生信息更新成功' });
   } catch (error) {
-    logger.error('更新学生失败:', error);
+    logger.error('Failed to update student:', error);
     res.status(500).json({ error: '更新学生失败' });
   }
 });
@@ -142,11 +142,11 @@ router.delete('/:id', authenticateToken, (req: Request, res: Response) => {
     db.prepare('INSERT INTO logs (user_id, action, details) VALUES (?, ?, ?)')
       .run(authReq.userId, 'DELETE_STUDENT', JSON.stringify({ id: req.params.id }));
 
-    logger.info('删除学生成功', { id: req.params.id });
+    logger.info('Student deleted successfully', { id: req.params.id });
 
     res.json({ message: '学生删除成功' });
   } catch (error) {
-    logger.error('删除学生失败:', error);
+    logger.error('Failed to delete student:', error);
     res.status(500).json({ error: '删除学生失败' });
   }
 });
@@ -177,16 +177,16 @@ router.post('/batch', authenticateToken, (req: Request, res: Response) => {
     db.prepare('INSERT INTO logs (user_id, action, details) VALUES (?, ?, ?)')
       .run(authReq.userId, 'BATCH_IMPORT_STUDENTS', JSON.stringify({ count: students.length }));
 
-    logger.info('批量导入学生成功', { count: students.length });
+    logger.info('Batch import students succeeded', { count: students.length });
 
     res.json({ message: `成功导入 ${students.length} 名学生` });
   } catch (error) {
-    logger.error('批量导入学生失败:', error);
+    logger.error('Failed to batch import students:', error);
     res.status(500).json({ error: '批量导入学生失败' });
   }
 });
 
-// 导出学生量化记录
+// Export student quantification records
 router.post('/export-records', authenticateToken, async (req: Request, res: Response) => {
   try {
     const { startDate, endDate } = req.body;
@@ -195,7 +195,7 @@ router.post('/export-records', authenticateToken, async (req: Request, res: Resp
       return res.status(400).json({ error: '请提供开始日期和结束日期' });
     }
 
-    logger.info('导出学生量化记录', { startDate, endDate });
+    logger.info('Export student quantification records', { startDate, endDate });
 
     // 获取指定时间范围内有量化记录的学生及其记录
     const records = db.prepare(`
@@ -292,9 +292,9 @@ router.post('/export-records', authenticateToken, async (req: Request, res: Resp
     await workbook.xlsx.write(res);
     res.end();
 
-    logger.info('学生量化记录导出成功', { startDate, endDate, studentCount: sortedKeys.length });
+    logger.info('Student quantification records exported successfully', { startDate, endDate, studentCount: sortedKeys.length });
   } catch (error: any) {
-    logger.error('导出学生量化记录失败', { error: error.message });
+    logger.error('Export student quantification records失败', { error: error.message });
     res.status(500).json({ error: '导出失败: ' + error.message });
   }
 });

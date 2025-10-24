@@ -44,9 +44,9 @@ router.get('/students/excel', authenticateToken, async (_req: Request, res: Resp
     res.setHeader('Content-Disposition', 'attachment; filename=students.xlsx');
     res.send(buffer);
 
-    logger.info('导出学生数据成功');
+    logger.info('Student data exported successfully');
   } catch (error) {
-    logger.error('导出学生数据失败:', error);
+    logger.error('Failed to export student data:', error);
     res.status(500).json({ error: '导出学生数据失败' });
   }
 });
@@ -81,9 +81,9 @@ router.get('/scores/excel', authenticateToken, async (_req: Request, res: Respon
     res.setHeader('Content-Disposition', 'attachment; filename=scores.xlsx');
     res.send(buffer);
 
-    logger.info('导出积分数据成功');
+    logger.info('Score data exported successfully');
   } catch (error) {
-    logger.error('导出积分数据失败:', error);
+    logger.error('Failed to export score data:', error);
     res.status(500).json({ error: '导出积分数据失败' });
   }
 });
@@ -143,10 +143,10 @@ router.post('/parse', authenticateToken, upload.single('file'), async (req: Requ
       allData: data // 返回所有数据供前端使用
     });
 
-    logger.info('解析文件成功', { filename, rows: data.length });
+    logger.info('File parsed successfully', { filename, rows: data.length });
   } catch (error: any) {
-    logger.error('解析文件失败:', error);
-    res.status(500).json({ error: '解析文件失败: ' + error.message });
+    logger.error('Failed to parse file:', error);
+    res.status(500).json({ error: 'Failed to parse file: ' + error.message });
   }
 });
 
@@ -189,9 +189,9 @@ router.post('/parse-text', authenticateToken, (req: Request, res: Response) => {
       message: '文本解析完成（使用简单解析逻辑）'
     });
 
-    logger.info('解析文本成功', { rows: data.length, dataType });
+    logger.info('Text parsed successfully', { rows: data.length, dataType });
   } catch (error) {
-    logger.error('解析文本失败:', error);
+    logger.error('Failed to parse text:', error);
     res.status(500).json({ error: '解析文本失败' });
   }
 });
@@ -259,7 +259,7 @@ router.post('/students/import', authenticateToken, (req: Request, res: Response)
         total: data.length 
       }));
 
-    logger.info('批量导入学生完成', { successCount, failCount, total: data.length });
+    logger.info('Batch import students completed', { successCount, failCount, total: data.length });
 
     res.json({ 
       success: true,
@@ -270,8 +270,8 @@ router.post('/students/import', authenticateToken, (req: Request, res: Response)
     });
 
   } catch (error: any) {
-    logger.error('批量导入学生失败:', error);
-    res.status(500).json({ error: '批量导入学生失败: ' + error.message });
+    logger.error('Failed to batch import students:', error);
+    res.status(500).json({ error: 'Failed to batch import students: ' + error.message });
   }
 });
 
@@ -281,7 +281,7 @@ router.post('/teachers/import', authenticateToken, (req: Request, res: Response)
     const { data, mapping } = req.body;
     
     // 记录接收到的原始数据（用于调试）
-    logger.info('接收教师导入请求', { 
+    logger.info('Received teacher import request', { 
       dataCount: data?.length || 0,
       mapping,
       firstRow: data?.[0] || null
@@ -324,7 +324,7 @@ router.post('/teachers/import', authenticateToken, (req: Request, res: Response)
             failCount++;
             const errorMsg = `跳过数据行 - 姓名:${name || '空'}, 科目:${subject || '空'}`;
             errors.push(errorMsg);
-            logger.warn('教师导入验证失败：缺少必填字段', { 
+            logger.warn('Teacher import validation failed: Missing required fields', { 
               name, 
               subject, 
               rawTeachingClasses,
@@ -345,7 +345,7 @@ router.post('/teachers/import', authenticateToken, (req: Request, res: Response)
           failCount++;
           const errorMsg = `导入 ${row[mapping.name] || '未知'} 失败：${error.message}`;
           errors.push(errorMsg);
-          logger.error('教师导入异常', { error: error.message, row, mapping });
+          logger.error('Teacher import exception', { error: error.message, row, mapping });
         }
       }
     });
@@ -360,7 +360,7 @@ router.post('/teachers/import', authenticateToken, (req: Request, res: Response)
         total: data.length 
       }));
 
-    logger.info('批量导入教师完成', { successCount, failCount, total: data.length });
+    logger.info('Batch import teachers completed', { successCount, failCount, total: data.length });
 
     res.json({ 
       success: true,
@@ -372,8 +372,8 @@ router.post('/teachers/import', authenticateToken, (req: Request, res: Response)
     });
 
   } catch (error: any) {
-    logger.error('批量导入教师失败:', error);
-    res.status(500).json({ error: '批量导入教师失败: ' + error.message });
+    logger.error('Failed to batch import teachers:', error);
+    res.status(500).json({ error: 'Failed to batch import teachers: ' + error.message });
   }
 });
 

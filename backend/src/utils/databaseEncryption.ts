@@ -30,7 +30,7 @@ function deriveDatabaseKey(passwordHash: string, salt: Buffer): Buffer {
  */
 export async function encryptDatabase(dbPath: string, passwordHash: string): Promise<string> {
   try {
-    logger.info('开始加密数据库', { dbPath });
+    logger.info('Starting database encryption', { dbPath });
     
     // 读取原始数据库文件
     if (!fs.existsSync(dbPath)) {
@@ -65,7 +65,7 @@ export async function encryptDatabase(dbPath: string, passwordHash: string): Pro
     const encryptedPath = `${dbPath}.encrypted`;
     fs.writeFileSync(encryptedPath, combined);
     
-    logger.info('数据库加密完成', { 
+    logger.info('Database encryption completed', { 
       originalSize: dbData.length,
       encryptedSize: combined.length,
       encryptedPath 
@@ -73,7 +73,7 @@ export async function encryptDatabase(dbPath: string, passwordHash: string): Pro
     
     return encryptedPath;
   } catch (error) {
-    logger.error('数据库加密失败', { error, dbPath });
+    logger.error('Database encryption failed', { error, dbPath });
     throw error;
   }
 }
@@ -90,7 +90,7 @@ export async function decryptDatabase(
   outputPath?: string
 ): Promise<string> {
   try {
-    logger.info('开始解密数据库', { encryptedPath });
+    logger.info('Starting database decryption', { encryptedPath });
     
     // 读取加密文件
     if (!fs.existsSync(encryptedPath)) {
@@ -130,7 +130,7 @@ export async function decryptDatabase(
     const decryptedPath = outputPath || encryptedPath.replace('.encrypted', '');
     fs.writeFileSync(decryptedPath, decrypted);
     
-    logger.info('数据库解密完成', { 
+    logger.info('Database decryption completed', { 
       encryptedSize: combined.length,
       decryptedSize: decrypted.length,
       decryptedPath 
@@ -139,10 +139,10 @@ export async function decryptDatabase(
     return decryptedPath;
   } catch (error: any) {
     if (error.message.includes('Unsupported state or unable to authenticate data')) {
-      logger.error('数据库解密失败：密码错误或文件已损坏', { encryptedPath });
+      logger.error('Database decryption failed: Wrong password or corrupted file', { encryptedPath });
       throw new Error('密码错误或数据库文件已损坏');
     }
-    logger.error('数据库解密失败', { error: error.message, encryptedPath });
+    logger.error('Database decryption failed', { error: error.message, encryptedPath });
     throw error;
   }
 }
@@ -163,7 +163,7 @@ export async function encryptDatabaseOnShutdown(
 ): Promise<void> {
   try {
     if (!passwordHash) {
-      logger.warn('无密码哈希，跳过数据库加密');
+      logger.warn('No password hash, skipping database encryption');
       return;
     }
     
@@ -172,10 +172,10 @@ export async function encryptDatabaseOnShutdown(
     
     // 删除明文数据库（可选，谨慎操作）
     // fs.unlinkSync(dbPath);
-    // logger.info('已删除明文数据库文件', { dbPath });
+    // logger.info('Deleted plaintext database file', { dbPath });
     
   } catch (error) {
-    logger.error('关闭时加密数据库失败', { error, dbPath });
+    logger.error('Failed to encrypt database on shutdown', { error, dbPath });
   }
 }
 
@@ -195,17 +195,17 @@ export async function decryptDatabaseOnStartup(
     }
     
     if (!passwordHash) {
-      logger.error('需要密码哈希来解密数据库');
+      logger.error('Need password hash to decrypt database');
       throw new Error('无法解密数据库：缺少密码');
     }
     
     // 解密数据库
     await decryptDatabase(encryptedPath, passwordHash, dbPath);
     
-    logger.info('数据库解密完成，应用可以启动', { dbPath });
+    logger.info('Database decryption completed，应用可以启动', { dbPath });
     
   } catch (error) {
-    logger.error('启动时解密数据库失败', { error, dbPath });
+    logger.error('Failed to decrypt database on startup', { error, dbPath });
     throw error;
   }
 }

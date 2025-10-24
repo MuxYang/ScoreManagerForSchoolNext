@@ -20,35 +20,35 @@ export function authenticateToken(req: Request, res: Response, next: NextFunctio
   const JWT_SECRET = process.env.JWT_SECRET;
 
   if (!JWT_SECRET) {
-    logger.error('FATAL: JWT_SECRET 环境变量未设置！');
-    return res.status(500).json({ error: '服务器安全配置错误，请联系管理员。' });
+    logger.error('FATAL: JWT_SECRET environment variable not set!');
+    return res.status(500).json({ error: 'Server security configuration error, please contact administrator.' });
   }
 
   if (JWT_SECRET.length < 32) {
-    logger.error('FATAL: JWT_SECRET 长度不足（当前: ' + JWT_SECRET.length + '，要求: >= 32）');
-    return res.status(500).json({ error: '服务器安全配置错误，请联系管理员。' });
+    logger.error('FATAL: JWT_SECRET length insufficient (current: ' + JWT_SECRET.length + ', required: >= 32)');
+    return res.status(500).json({ error: 'Server security configuration error, please contact administrator.' });
   }
 
-  // 优先验证加密的 auth_session Cookie（包含5分钟超时和服务器重启检测）
+  // Prioritize validating encrypted auth_session Cookie (includes 5-min timeout and server restart detection)
   const authSessionCookie = req.cookies?.auth_session;
   
   if (authSessionCookie) {
     try {
-      // 解密 Cookie
+      // Decrypt Cookie
       const cookieData = decryptCookie(authSessionCookie);
       
       if (cookieData) {
-        // 提取浏览器指纹
+        // Extract browser fingerprint
         const userAgent = req.headers['user-agent'] || '';
         const acceptLanguage = req.headers['accept-language'];
         const currentFingerprint = extractBrowserFingerprint(userAgent, acceptLanguage);
         
-        // 验证 Cookie（检查时间戳、sessionId、浏览器指纹）
+        // Validate Cookie (check timestamp, sessionId, browser fingerprint)
         const validation = validateCookie(cookieData, currentFingerprint);
         
         if (validation.valid) {
-          // Cookie基本验证通过，现在验证用户密码
-          // 从数据库读取用户信息
+          // Cookie basic validation passed, now validate user password
+          // Read user info from database
           const user = db.prepare('SELECT id, username, password_hash FROM users WHERE id = ? AND username = ?')
             .get(cookieData.userId, cookieData.username) as any;
           
@@ -191,7 +191,7 @@ export function authenticateToken(req: Request, res: Response, next: NextFunctio
     (req as AuthRequest).username = decoded.username;
     next();
   } catch (error) {
-    logger.error('Token 验证失败:', error);
+    logger.error('Token validation failed:', error);
     return res.status(403).json({ error: '无效的认证令牌' });
   }
 }

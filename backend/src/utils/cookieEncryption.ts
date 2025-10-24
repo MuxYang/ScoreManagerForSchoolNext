@@ -44,7 +44,7 @@ export function getServerSessionId(): string {
 }
 
 /**
- * 从请求中提取浏览器指纹
+ * 从请求中Extract browser fingerprint
  * 只包含稳定的、持久的信息
  */
 export function extractBrowserFingerprint(userAgent: string, acceptLanguage?: string): string {
@@ -129,7 +129,7 @@ export function encryptCookie(data: SecureCookieData): string {
 }
 
 /**
- * 解密 Cookie 数据
+ * Decrypt Cookie 数据
  */
 export function decryptCookie(encryptedCookie: string): SecureCookieData | null {
   try {

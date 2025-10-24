@@ -17,6 +17,7 @@ import logger from './utils/logger';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
 import { initializeServerSessionId } from './utils/cookieEncryption';
 import { validateOneTimeToken } from './middleware/tokenValidator';
+import { normalizeIp } from './utils/ipHelper';
 
 // 导入路由
 import authRoutes from './routes/auth';
@@ -29,7 +30,11 @@ import userConfigRoutes from './routes/userConfig';
 
 const app = express();
 const PORT = parseInt(process.env.PORT || '3000', 10);
-const HOST = process.env.HOST || '0.0.0.0'; // 允许局域网连接
+const HOST = process.env.HOST || '0.0.0.0'; // Allow LAN connections
+
+// Configure trust proxy to correctly read client IP
+// This enables req.ip to work properly behind proxies
+app.set('trust proxy', true);
 
 // Initialize server session ID (generates new one on each startup)
 const sessionId = initializeServerSessionId();
@@ -50,20 +55,19 @@ try {
   process.exit(1);
 }
 
-// 局域网访问限制中间件
+// LAN access restriction middleware
 app.use((req, res, next) => {
-  const clientIp = req.ip || req.connection.remoteAddress || '';
-  const ip = clientIp.replace(/^::ffff:/, ''); // 移除IPv6前缀
+  const ip = normalizeIp(req);
   
-  // 允许的IP范围：
+  // Allowed IP ranges:
   // - 127.0.0.1 (localhost)
-  // - 10.0.0.0 - 10.255.255.255 (A类私有地址)
-  // - 172.16.0.0 - 172.31.255.255 (B类私有地址)
-  // - 192.168.0.0 - 192.168.255.255 (C类私有地址)
+  // - 10.0.0.0 - 10.255.255.255 (Class A private)
+  // - 172.16.0.0 - 172.31.255.255 (Class B private)
+  // - 192.168.0.0 - 192.168.255.255 (Class C private)
   // - ::1 (IPv6 localhost)
   // - fe80::/10 (IPv6 link-local)
   
-  const isLocalhost = ip === '127.0.0.1' || ip === 'localhost' || ip === '::1';
+  const isLocalhost = ip === '127.0.0.1' || ip === 'localhost' || ip === '::1' || ip === '';
   const isPrivateNetwork = 
     /^10\./.test(ip) ||
     /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(ip) ||
@@ -71,9 +75,9 @@ app.use((req, res, next) => {
     /^fe80:/i.test(ip);
   
   if (!isLocalhost && !isPrivateNetwork) {
-    logger.warn('拒绝公网IP访问', { ip, path: req.path });
+    logger.warn('Rejected public IP access', { ip, path: req.path });
     return res.status(403).json({ 
-      error: '此服务仅允许局域网访问' 
+      error: 'This service is only accessible from LAN' 
     });
   }
   
@@ -93,12 +97,12 @@ app.use(cors({
       const url = new URL(origin);
       const hostname = url.hostname;
       
-      // 允许localhost
+      // Allow localhost
       if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1') {
         return callback(null, true);
       }
       
-      // 允许所有局域网IP
+      // Allow all LAN IPs
       const isPrivateNetwork = 
         /^10\./.test(hostname) ||
         /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(hostname) ||
@@ -109,12 +113,12 @@ app.use(cors({
         return callback(null, true);
       }
       
-      // 拒绝其他来源
-      logger.warn('CORS: 拒绝非局域网源', { origin });
-      callback(new Error('仅允许局域网访问'));
+      // Reject other origins
+      logger.warn('CORS: Rejected non-LAN origin', { origin });
+      callback(new Error('Only LAN access allowed'));
     } catch (error) {
-      logger.error('CORS: URL解析失败', { origin, error });
-      callback(new Error('无效的请求源'));
+      logger.error('CORS: URL parsing failed', { origin, error });
+      callback(new Error('Invalid request origin'));
     }
   },
   credentials: true // Allow sending cookies
@@ -123,37 +127,37 @@ app.use(cors({
 // Cookie parser middleware
 app.use(cookieParser());
 
-// 全局 API 速率限制（较宽松，防止大规模攻击）
+// Global API rate limit (lenient, prevents large-scale attacks)
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 分钟
-  max: 150, // 每个 IP 最多 150 个请求（提高到 150，因为有单独的登录限制）
-  message: '请求过于频繁，请稍后再试',
-  standardHeaders: true, // 返回 RateLimit-* 响应头
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 150, // Max 150 requests per IP (increased to 150, separate login limit exists)
+  message: 'Too many requests, please try again later',
+  standardHeaders: true, // Return RateLimit-* headers
   legacyHeaders: false,
   handler: (req, res) => {
-    logger.warn('全局速率限制触发', { 
-      ip: req.ip,
+    logger.warn('Global rate limit triggered', { 
+      ip: normalizeIp(req),
       path: req.path,
       userAgent: req.headers['user-agent']
     });
     res.status(429).json({ 
-      error: '请求过于频繁，请稍后再试' 
+      error: 'Too many requests, please try again later' 
     });
   }
 });
 app.use(limiter);
 
-// Body 解析
+// Body parsing
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// 请求日志
+// Request logging
 app.use((req, res, next) => {
-  logger.info(`${req.method} ${req.path}`, { ip: req.ip });
+  logger.info(`${req.method} ${req.path}`, { ip: normalizeIp(req) });
   next();
 });
 
-// 一次性token验证中间件（应用于所有API路由）
+// One-time token validation middleware (applied to all API routes)
 app.use('/api', validateOneTimeToken);
 
 // 健康检查

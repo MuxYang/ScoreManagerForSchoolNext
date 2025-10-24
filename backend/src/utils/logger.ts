@@ -3,16 +3,16 @@ import path from 'path';
 import fs from 'fs';
 import archiver from 'archiver';
 
-// 日志目录位于根目录
+// Log directory at root
 const LOG_DIR = process.env.LOG_DIR || path.join(__dirname, '../../../logs');
-const LOG_LEVEL = process.env.LOG_LEVEL || 'debug'; // 提高默认日志级别到 debug
+const LOG_LEVEL = process.env.LOG_LEVEL || 'debug'; // Increased default log level to debug
 
-// 确保日志目录存在
+// Ensure log directory exists
 if (!fs.existsSync(LOG_DIR)) {
   fs.mkdirSync(LOG_DIR, { recursive: true });
 }
 
-// 生成当前 session 的日志文件名（格式：YYYY-MM-DD-HHmmss）
+// Generate current session log filename (format: YYYY-MM-DD-HHmmss)
 const SESSION_START_TIME = new Date();
 const SESSION_TIMESTAMP = SESSION_START_TIME.toISOString()
   .replace(/T/, '-')
@@ -24,7 +24,7 @@ const SESSION_LOG_FILE = path.join(LOG_DIR, `session-${SESSION_TIMESTAMP}.log`);
 const SESSION_ERROR_FILE = path.join(LOG_DIR, `session-${SESSION_TIMESTAMP}-error.log`);
 
 /**
- * 压缩上一次运行的日志文件
+ * Compress previous run's log files
  */
 async function compressPreviousLogs() {
   try {
@@ -36,14 +36,14 @@ async function compressPreviousLogs() {
     );
 
     if (logFiles.length === 0) {
-      console.log('没有需要压缩的旧日志文件');
+      console.log('No old log files to compress');
       return;
     }
 
-    // 按文件名排序，获取最新的一组日志
+    // Sort by filename, get the latest set of logs
     logFiles.sort().reverse();
     
-    // 找出最新的 session（可能有 .log 和 -error.log 两个文件）
+    // Find the latest session (may have .log and -error.log files)
     const latestSession = logFiles[0].match(/session-(\d{4}-\d{2}-\d{2}-\d{6})/)?.[1];
     
     if (!latestSession) return;
@@ -51,9 +51,9 @@ async function compressPreviousLogs() {
     const filesToCompress = logFiles.filter(f => f.includes(latestSession));
     const zipFileName = path.join(LOG_DIR, `session-${latestSession}.zip`);
 
-    // 如果已经存在 zip 文件，跳过
+    // Skip if zip file already exists
     if (fs.existsSync(zipFileName)) {
-      // 删除原始日志文件
+      // Delete original log files
       filesToCompress.forEach(f => {
         const filePath = path.join(LOG_DIR, f);
         if (fs.existsSync(filePath)) {
@@ -63,22 +63,22 @@ async function compressPreviousLogs() {
       return;
     }
 
-    console.log(`正在压缩上一次的日志文件: ${filesToCompress.join(', ')}`);
+    console.log(`Compressing previous log files: ${filesToCompress.join(', ')}`);
 
-    // 创建 zip 压缩流
+    // Create zip compression stream
     const output = fs.createWriteStream(zipFileName);
     const archive = archiver('zip', { zlib: { level: 9 } });
 
     return new Promise<void>((resolve, reject) => {
       output.on('close', () => {
-        console.log(`日志已压缩: ${zipFileName} (${archive.pointer()} bytes)`);
+        console.log(`Logs compressed: ${zipFileName} (${archive.pointer()} bytes)`);
         
-        // 删除原始日志文件
+        // Delete original log files
         filesToCompress.forEach(f => {
           const filePath = path.join(LOG_DIR, f);
           if (fs.existsSync(filePath)) {
             fs.unlinkSync(filePath);
-            console.log(`已删除原始日志: ${f}`);
+            console.log(`Deleted original log: ${f}`);
           }
         });
         
@@ -86,13 +86,13 @@ async function compressPreviousLogs() {
       });
 
       archive.on('error', (err: Error) => {
-        console.error('压缩日志文件失败:', err);
+        console.error('Failed to compress log files:', err);
         reject(err);
       });
 
       archive.pipe(output);
 
-      // 添加日志文件到压缩包
+      // Add log files to archive
       filesToCompress.forEach(f => {
         const filePath = path.join(LOG_DIR, f);
         if (fs.existsSync(filePath)) {
@@ -103,14 +103,14 @@ async function compressPreviousLogs() {
       archive.finalize();
     });
   } catch (error) {
-    console.error('压缩上一次日志时出错:', error);
+    console.error('Error compressing previous logs:', error);
   }
 }
 
-// 启动时压缩上一次的日志
+// Compress previous logs on startup
 compressPreviousLogs();
 
-// 详细的日志格式，包含更多元数据
+// Detailed log format with more metadata
 const detailedLogFormat = winston.format.combine(
   winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss.SSS' }),
   winston.format.errors({ stack: true }),
@@ -119,7 +119,7 @@ const detailedLogFormat = winston.format.combine(
   winston.format.printf(({ timestamp, level, message, metadata, stack }) => {
     let log = `${timestamp} [${level.toUpperCase().padEnd(5)}]`;
     
-    // 添加调用位置信息（如果有）
+    // Add caller location info (if available)
     const meta = metadata as any;
     if (meta?.caller) {
       log += ` [${meta.caller}]`;
@@ -127,7 +127,7 @@ const detailedLogFormat = winston.format.combine(
     
     log += `: ${message}`;
     
-    // 添加元数据
+    // Add metadata
     const metaKeys = Object.keys(meta || {}).filter(k => k !== 'caller');
     if (metaKeys.length > 0) {
       const metaObj: any = {};
@@ -135,7 +135,7 @@ const detailedLogFormat = winston.format.combine(
       log += `\n  └─ ${JSON.stringify(metaObj, null, 2).replace(/\n/g, '\n     ')}`;
     }
     
-    // 添加堆栈信息
+    // Add stack trace
     if (stack) {
       log += `\n  └─ Stack: ${stack}`;
     }
@@ -144,14 +144,14 @@ const detailedLogFormat = winston.format.combine(
   })
 );
 
-// 控制台输出格式（带颜色）
+// Console output format (with colors)
 const consoleFormat = winston.format.combine(
   winston.format.colorize(),
   winston.format.timestamp({ format: 'HH:mm:ss' }),
   winston.format.printf(({ timestamp, level, message, ...meta }) => {
     let msg = `${timestamp} ${level}: ${message}`;
     
-    // 过滤掉内部元数据
+    // Filter out internal metadata
     const filteredMeta = { ...meta };
     delete filteredMeta.timestamp;
     delete filteredMeta.level;
@@ -164,35 +164,35 @@ const consoleFormat = winston.format.combine(
   })
 );
 
-// 创建日志记录器
+// Create logger instance
 const logger = winston.createLogger({
   level: LOG_LEVEL,
   transports: [
-    // 控制台输出（简洁格式）
+    // Console output (concise format)
     new winston.transports.Console({
       format: consoleFormat,
     }),
-    // 当前 session 的完整日志文件（详细格式）
+    // Current session's full log file (detailed format)
     new winston.transports.File({
       filename: SESSION_LOG_FILE,
       format: detailedLogFormat,
-      level: 'debug', // 记录所有级别
+      level: 'debug', // Record all levels
     }),
-    // 当前 session 的错误日志文件（详细格式）
+    // Current session's error log file (detailed format)
     new winston.transports.File({
       filename: SESSION_ERROR_FILE,
       format: detailedLogFormat,
-      level: 'error', // 只记录错误
+      level: 'error', // Only record errors
     }),
   ],
 });
 
-// 记录 session 启动信息
+// Log session startup info
 logger.info('='.repeat(80));
-logger.info(`日志 Session 开始: ${SESSION_TIMESTAMP}`);
-logger.info(`日志文件: ${SESSION_LOG_FILE}`);
-logger.info(`错误日志文件: ${SESSION_ERROR_FILE}`);
-logger.info(`日志级别: ${LOG_LEVEL}`);
+logger.info(`Log Session started: ${SESSION_TIMESTAMP}`);
+logger.info(`Log file: ${SESSION_LOG_FILE}`);
+logger.info(`Error log file: ${SESSION_ERROR_FILE}`);
+logger.info(`Log level: ${LOG_LEVEL}`);
 logger.info('='.repeat(80));
 
 export default logger;

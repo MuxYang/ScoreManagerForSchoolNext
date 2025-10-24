@@ -13,10 +13,10 @@ const DB_PATH = path.resolve(process.env.DB_PATH || './data/database.db');
 try {
   if (!fs.existsSync(BACKUP_DIR)) {
     fs.mkdirSync(BACKUP_DIR, { recursive: true });
-    logger.info('创建备份目录成功', { path: BACKUP_DIR });
+    logger.info('Backup directory created successfully', { path: BACKUP_DIR });
   }
 } catch (error) {
-  logger.error('创建备份目录失败:', error);
+  logger.error('Failed to create backup directory:', error);
 }
 
 // 创建备份
@@ -27,7 +27,7 @@ router.post('/create', authenticateToken, (req: Request, res: Response) => {
     const filename = `backup-${timestamp}.db`;
     const backupPath = path.join(BACKUP_DIR, filename);
 
-    logger.info('开始创建备份', { 
+    logger.info('Starting backup creation', { 
       filename, 
       backupPath,
       dbPath: DB_PATH,
@@ -58,7 +58,7 @@ router.post('/create', authenticateToken, (req: Request, res: Response) => {
     db.prepare('INSERT INTO logs (user_id, action, details) VALUES (?, ?, ?)')
       .run(authReq.userId, 'CREATE_BACKUP', JSON.stringify({ filename }));
 
-    logger.info('创建备份成功', { filename, size: stats.size });
+    logger.info('Backup created successfully', { filename, size: stats.size });
 
     res.json({ 
       message: '备份创建成功',
@@ -66,8 +66,8 @@ router.post('/create', authenticateToken, (req: Request, res: Response) => {
       size: stats.size 
     });
   } catch (error: any) {
-    logger.error('创建备份失败:', error);
-    res.status(500).json({ error: `创建备份失败: ${error.message}` });
+    logger.error('Failed to create backup:', error);
+    res.status(500).json({ error: `Failed to create backup: ${error.message}` });
   }
 });
 
@@ -83,7 +83,7 @@ router.get('/list', authenticateToken, (req: Request, res: Response) => {
 
     res.json(backups);
   } catch (error) {
-    logger.error('获取备份列表失败:', error);
+    logger.error('Failed to get backup list:', error);
     res.status(500).json({ error: '获取备份列表失败' });
   }
 });
@@ -126,14 +126,14 @@ router.post('/restore/:filename', authenticateToken, (req: Request, res: Respons
         autoBackup: autoBackupFilename 
       }));
 
-    logger.info('恢复备份成功', { filename, autoBackup: autoBackupFilename });
+    logger.info('Backup restored successfully', { filename, autoBackup: autoBackupFilename });
 
     res.json({ 
       message: '备份恢复成功，当前数据库已自动备份',
       autoBackup: autoBackupFilename
     });
   } catch (error) {
-    logger.error('恢复备份失败:', error);
+    logger.error('Failed to restore backup:', error);
     res.status(500).json({ error: '恢复备份失败' });
   }
 });
@@ -156,11 +156,11 @@ router.delete('/:filename', authenticateToken, (req: Request, res: Response) => 
     db.prepare('INSERT INTO logs (user_id, action, details) VALUES (?, ?, ?)')
       .run(authReq.userId, 'DELETE_BACKUP', JSON.stringify({ filename }));
 
-    logger.info('删除备份成功', { filename });
+    logger.info('Backup deleted successfully', { filename });
 
     res.json({ message: '备份删除成功' });
   } catch (error) {
-    logger.error('删除备份失败:', error);
+    logger.error('Failed to delete backup:', error);
     res.status(500).json({ error: '删除备份失败' });
   }
 });
@@ -209,7 +209,7 @@ router.get('/database-stats', authenticateToken, (req: Request, res: Response) =
       recentActivity: recentLogs,
     });
   } catch (error) {
-    logger.error('获取数据库统计信息失败:', error);
+    logger.error('Failed to get database statistics:', error);
     res.status(500).json({ error: '获取数据库统计信息失败' });
   }
 });
@@ -228,11 +228,11 @@ router.post('/optimize', authenticateToken, (req: Request, res: Response) => {
     db.prepare('INSERT INTO logs (user_id, action, details) VALUES (?, ?, ?)')
       .run(authReq.userId, 'OPTIMIZE_DATABASE', JSON.stringify({ success: true }));
 
-    logger.info('数据库优化成功', { userId: authReq.userId });
+    logger.info('Database optimized successfully', { userId: authReq.userId });
 
-    res.json({ message: '数据库优化成功' });
+    res.json({ message: 'Database optimized successfully' });
   } catch (error) {
-    logger.error('数据库优化失败:', error);
+    logger.error('Failed to optimize database:', error);
     res.status(500).json({ error: '数据库优化失败' });
   }
 });

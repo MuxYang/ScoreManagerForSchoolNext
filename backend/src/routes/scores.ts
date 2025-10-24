@@ -50,7 +50,7 @@ router.get('/', authenticateToken, (req: Request, res: Response) => {
     const scores = db.prepare(query).all(...params);
     res.json(scores);
   } catch (error) {
-    logger.error('获取积分记录失败:', error);
+    logger.error('Failed to get score records:', error);
     res.status(500).json({ error: '获取积分记录失败' });
   }
 });
@@ -71,7 +71,7 @@ router.get('/statistics/:studentId', authenticateToken, (req: Request, res: Resp
 
     res.json(stats);
   } catch (error) {
-    logger.error('获取积分统计失败:', error);
+    logger.error('Failed to get score statistics:', error);
     res.status(500).json({ error: '获取积分统计失败' });
   }
 });
@@ -82,7 +82,7 @@ router.post('/', authenticateToken, (req: Request, res: Response) => {
     let { studentId, points, reason, teacherName, date } = req.body as any;
 
     // 记录关键入参（避免泄漏敏感信息）
-    logger.warn('POST /scores 收到请求', {
+    logger.warn('POST /scores received request', {
       hasStudentId: !!studentId,
       hasStudentName: !!(req.body?.studentName || req.body?.name),
       hasClass: !!(req.body?.class || req.body?.className),
@@ -122,7 +122,7 @@ router.post('/', authenticateToken, (req: Request, res: Response) => {
             if (sameNameList.length === 1) {
               matchedStudent = sameNameList[0];
             } else if (sameNameList.length > 1) {
-              logger.warn('POST /scores 兼容分支：同名学生不唯一，需提供学号或班级', { name: rawName, count: sameNameList.length });
+              logger.warn('POST /scores compatibility: Non-unique student name, need ID or class', { name: rawName, count: sameNameList.length });
               return res.status(400).json({ error: '存在同名学生，请提供学号或班级以唯一确定学生' });
             }
           }
@@ -130,16 +130,16 @@ router.post('/', authenticateToken, (req: Request, res: Response) => {
 
         if (matchedStudent) {
           studentId = matchedStudent.id;
-          logger.warn('POST /scores 兼容分支：根据姓名/班级推断出 studentId，将继续写入', { name: rawName, class: rawClass, studentId });
+          logger.warn('POST /scores compatibility: Inferred studentId from name/class, will continue', { name: rawName, class: rawClass, studentId });
         }
       } catch (e) {
-        logger.error('POST /scores 兼容匹配出错', { error: (e as Error).message });
+        logger.error('POST /scores compatibility matching error', { error: (e as Error).message });
       }
     }
 
     // 兜底：如果未提供 points，则默认使用 2 分（与前端默认显示保持一致）
     if (points === undefined || points === null || Number.isNaN(Number(points))) {
-      logger.warn('POST /scores 兼容分支：未提供 points，使用默认值 2');
+      logger.warn('POST /scores compatibility: No points provided, using default value 2');
       points = 2;
     }
 
@@ -151,7 +151,7 @@ router.post('/', authenticateToken, (req: Request, res: Response) => {
     if (reason) {
       const reasonValidation = validateInput(reason, { maxLength: 200 });
       if (!reasonValidation.valid) {
-        logger.warn('添加积分被阻止：原因包含非法字符', { reason });
+        logger.warn('Add score blocked: Reason contains illegal characters', { reason });
         return res.status(400).json({ error: '原因包含非法字符' });
       }
     }
@@ -159,7 +159,7 @@ router.post('/', authenticateToken, (req: Request, res: Response) => {
     if (teacherName) {
       const teacherValidation = validateInput(teacherName, { maxLength: 50 });
       if (!teacherValidation.valid) {
-        logger.warn('添加积分被阻止：教师姓名包含非法字符', { teacherName });
+        logger.warn('Add score blocked: Teacher name contains illegal characters', { teacherName });
         return res.status(400).json({ error: '教师姓名包含非法字符' });
       }
     }
@@ -173,14 +173,14 @@ router.post('/', authenticateToken, (req: Request, res: Response) => {
     db.prepare('INSERT INTO logs (user_id, action, details) VALUES (?, ?, ?)')
       .run(authReq.userId, 'ADD_SCORE', JSON.stringify({ studentId, points, reason }));
 
-  logger.info('添加积分记录成功', { studentId, points });
+  logger.info('Score record added successfully', { studentId, points });
 
     res.status(201).json({ 
       id: result.lastInsertRowid,
       message: '积分记录添加成功' 
     });
   } catch (error) {
-    logger.error('添加积分记录失败:', error);
+    logger.error('Failed to add score record:', error);
     res.status(500).json({ error: '添加积分记录失败' });
   }
 });
@@ -204,11 +204,11 @@ router.put('/:id', authenticateToken, (req: Request, res: Response) => {
     db.prepare('INSERT INTO logs (user_id, action, details) VALUES (?, ?, ?)')
       .run(authReq.userId, 'UPDATE_SCORE', JSON.stringify({ id: req.params.id, points, reason }));
 
-    logger.info('更新积分记录成功', { id: req.params.id });
+    logger.info('Score record updated successfully', { id: req.params.id });
 
     res.json({ message: '积分记录更新成功' });
   } catch (error) {
-    logger.error('更新积分记录失败:', error);
+    logger.error('Failed to update score record:', error);
     res.status(500).json({ error: '更新积分记录失败' });
   }
 });
@@ -226,11 +226,11 @@ router.delete('/:id', authenticateToken, (req: Request, res: Response) => {
     db.prepare('INSERT INTO logs (user_id, action, details) VALUES (?, ?, ?)')
       .run(authReq.userId, 'DELETE_SCORE', JSON.stringify({ id: req.params.id }));
 
-    logger.info('删除积分记录成功', { id: req.params.id });
+    logger.info('Score record deleted successfully', { id: req.params.id });
 
     res.json({ message: '积分记录删除成功' });
   } catch (error) {
-    logger.error('删除积分记录失败:', error);
+    logger.error('Failed to delete score record:', error);
     res.status(500).json({ error: '删除积分记录失败' });
   }
 });
@@ -267,11 +267,11 @@ router.post('/batch', authenticateToken, (req: Request, res: Response) => {
     db.prepare('INSERT INTO logs (user_id, action, details) VALUES (?, ?, ?)')
       .run(authReq.userId, 'BATCH_IMPORT_SCORES', JSON.stringify({ count: scores.length }));
 
-    logger.info('批量导入积分记录成功', { count: scores.length });
+    logger.info('Batch import score records succeeded', { count: scores.length });
 
     res.json({ message: `成功导入 ${scores.length} 条积分记录` });
   } catch (error) {
-    logger.error('批量导入积分记录失败:', error);
+    logger.error('Failed to batch import score records:', error);
     res.status(500).json({ error: '批量导入积分记录失败' });
   }
 });
@@ -321,7 +321,7 @@ router.post('/ai-import', authenticateToken, (req: Request, res: Response) => {
             const teacherMatch = matchTeacherAndSubject(db, undefined, className, subject);
             if (teacherMatch.teacher) {
               teacherName = teacherMatch.teacher;
-              logger.info('AI导入：根据班级和科目自动匹配教师', {
+              logger.info('AI import: Auto-matched teacher by class and subject', {
                 recordIndex: i + 1,
                 className,
                 subject,
@@ -348,7 +348,7 @@ router.post('/ai-import', authenticateToken, (req: Request, res: Response) => {
               date || new Date().toISOString().split('T')[0]
             );
             successCount++;
-            logger.info('AI导入：记录成功导入', {
+            logger.info('AI import: Record imported successfully', {
               recordIndex: i + 1,
               studentName: name,
               className,
@@ -380,7 +380,7 @@ router.post('/ai-import', authenticateToken, (req: Request, res: Response) => {
                 reason: `未匹配到学生：${name}${className ? ` (${className})` : ''}`,
                 suggestions: matchResult.suggestions || []
               });
-              logger.info('AI导入：记录移入待处理', {
+              logger.info('AI import: Record moved to pending', {
                 recordIndex: i + 1,
                 studentName: name,
                 className: normalizedClass,
@@ -388,7 +388,7 @@ router.post('/ai-import', authenticateToken, (req: Request, res: Response) => {
               });
             } catch (pendingError: any) {
               errors.push(`记录 ${i + 1}（${name}）：添加到待处理失败 - ${pendingError.message}`);
-              logger.error('添加待处理记录失败', {
+              logger.error('Failed to add pending record', {
                 recordIndex: i + 1,
                 error: pendingError.message,
                 record
@@ -397,7 +397,7 @@ router.post('/ai-import', authenticateToken, (req: Request, res: Response) => {
           }
         } catch (error: any) {
           errors.push(`记录 ${i + 1}（${record.name || '未知'}）：导入失败 - ${error.message}`);
-          logger.error('导入记录失败', {
+          logger.error('Failed to import record', {
             recordIndex: i + 1,
             error: error.message,
             record
@@ -417,7 +417,7 @@ router.post('/ai-import', authenticateToken, (req: Request, res: Response) => {
         errorCount: errors.length
       }));
 
-    logger.info('AI批量导入量化记录完成', {
+    logger.info('AI batch import quantification records completed', {
       total: records.length,
       successCount,
       pendingCount,
@@ -435,7 +435,7 @@ router.post('/ai-import', authenticateToken, (req: Request, res: Response) => {
     });
 
   } catch (error: any) {
-    logger.error('AI批量导入量化记录失败:', error);
+    logger.error('Failed to AI batch import quantification records:', error);
     res.status(500).json({ error: 'AI批量导入失败: ' + error.message });
   }
 });
@@ -471,7 +471,7 @@ router.get('/pending', authenticateToken, (req: Request, res: Response) => {
       matchSuggestions: record.match_suggestions ? JSON.parse(record.match_suggestions) : []
     }));
     
-    logger.info('返回待处理记录', { 
+    logger.info('Returning pending records', { 
       count: parsedRecords.length, 
       sample: parsedRecords[0] || null 
     });
@@ -486,7 +486,7 @@ router.get('/pending', authenticateToken, (req: Request, res: Response) => {
       offset: Number(offset)
     });
   } catch (error) {
-    logger.error('获取待处理记录失败:', error);
+    logger.error('Failed to get pending records:', error);
     res.status(500).json({ error: '获取待处理记录失败' });
   }
 });
@@ -526,7 +526,7 @@ router.post('/import-records', authenticateToken, (req: Request, res: Response) 
 
     records.forEach((record: any, index: number) => {
       try {
-        const { name, class: className, studentId, reason, points, teacherName, subject, date } = record;
+        let { name, class: className, studentId, reason, points, teacherName, subject, date } = record;
         const finalPoints = Number(points) || 2;
 
         if (!name) {
@@ -551,6 +551,20 @@ router.post('/import-records', authenticateToken, (req: Request, res: Response) 
           return;
         }
 
+        // 🔧 如果有班级和科目但没有教师，尝试自动匹配教师
+        if (className && subject && !teacherName) {
+          const teacherMatch = matchTeacherAndSubject(db, undefined, className, subject);
+          if (teacherMatch.teacher) {
+            teacherName = teacherMatch.teacher;
+            logger.info('Table import: Auto-matched teacher by class and subject', {
+              recordIndex: index + 1,
+              className,
+              subject,
+              matchedTeacher: teacherName
+            });
+          }
+        }
+
         // 尝试匹配学生
         const matchResult = matchStudentForAIImport(db, name, className, teacherName);
 
@@ -564,6 +578,13 @@ router.post('/import-records', authenticateToken, (req: Request, res: Response) 
             date || new Date().toISOString().split('T')[0]
           );
           successCount++;
+          logger.info('Table import: Record imported successfully', {
+            recordIndex: index + 1,
+            studentName: name,
+            className,
+            teacherName,
+            matchedStudent: matchResult.student.name
+          });
         } else {
           // 无法匹配，移入待处理
           const normalizedClass = className ? normalizeClassName(className) : '';
@@ -592,7 +613,7 @@ router.post('/import-records', authenticateToken, (req: Request, res: Response) 
       }
     });
 
-    logger.info('违纪记录批量导入完成', {
+    logger.info('Disciplinary records batch import completed', {
       total: records.length,
       successCount,
       teacherRecordCount,
@@ -612,7 +633,7 @@ router.post('/import-records', authenticateToken, (req: Request, res: Response) 
     });
 
   } catch (error: any) {
-    logger.error('违纪记录批量导入失败:', error);
+    logger.error('Failed to batch import disciplinary records:', error);
     res.status(500).json({ error: '批量导入失败: ' + error.message });
   }
 });
@@ -660,16 +681,37 @@ router.post('/import-records/process-teachers', authenticateToken, (req: Request
 
       records.forEach((record: any, index: number) => {
         try {
+          let { teacherName, class: className, subject } = record;
+          
+          // 🔧 如果有班级和科目但没有教师，尝试自动匹配教师
+          if (className && subject && !teacherName) {
+            const teacherMatch = matchTeacherAndSubject(db, undefined, className, subject);
+            if (teacherMatch.teacher) {
+              teacherName = teacherMatch.teacher;
+              logger.info('Teacher record import as student: Auto-matched teacher by class and subject', {
+                recordIndex: index + 1,
+                className,
+                subject,
+                matchedTeacher: teacherName
+              });
+            }
+          }
+          
           const matchedStudent = students.find(s => s.name === record.name);
           if (matchedStudent) {
             insertScore.run(
               matchedStudent.id,
               record.points || 2,
               record.reason || '',
-              record.teacherName || '',
+              teacherName || '',
               record.date || new Date().toISOString().split('T')[0]
             );
             successCount++;
+            logger.info('Teacher record successfully imported as student quantification', {
+              recordIndex: index + 1,
+              studentName: record.name,
+              teacherName
+            });
           } else {
             errors.push(`记录 ${index + 1}（${record.name}）：未找到匹配的学生`);
           }
@@ -688,7 +730,7 @@ router.post('/import-records/process-teachers', authenticateToken, (req: Request
     });
 
   } catch (error: any) {
-    logger.error('处理教师记录失败:', error);
+    logger.error('Failed to process teacher records:', error);
     res.status(500).json({ error: '处理失败: ' + error.message });
   }
 });
@@ -723,7 +765,7 @@ router.post('/pending/:id/resolve', authenticateToken, (req: Request, res: Respo
       const teacherMatch = matchTeacherAndSubject(db, undefined, pending.class_name, pending.subject);
       if (teacherMatch.teacher) {
         teacherName = teacherMatch.teacher;
-        logger.info('待处理记录：根据班级和科目自动匹配教师', {
+        logger.info('Pending record: Auto-matched teacher by class and subject', {
           pendingId,
           className: pending.class_name,
           subject: pending.subject,
@@ -749,7 +791,7 @@ router.post('/pending/:id/resolve', authenticateToken, (req: Request, res: Respo
     db.prepare('INSERT INTO logs (user_id, action, details) VALUES (?, ?, ?)')
       .run(authReq.userId, 'RESOLVE_PENDING_SCORE', JSON.stringify({ pendingId, studentId, matchedTeacher: teacherName }));
 
-    logger.info('处理待处理记录成功', { pendingId, studentId, studentName: student.name, teacherName });
+    logger.info('Pending record processed successfully', { pendingId, studentId, studentName: student.name, teacherName });
 
     res.json({ 
       success: true, 
@@ -760,12 +802,12 @@ router.post('/pending/:id/resolve', authenticateToken, (req: Request, res: Respo
       teacherName: teacherName
     });
   } catch (error) {
-    logger.error('处理待处理记录失败:', error);
+    logger.error('Failed to process pending record:', error);
     res.status(500).json({ error: '处理待处理记录失败' });
   }
 });
 
-// 拒绝待处理记录
+// Rejected pending record
 router.post('/pending/:id/reject', authenticateToken, (req: Request, res: Response) => {
   try {
     const pendingId = req.params.id;
@@ -785,12 +827,12 @@ router.post('/pending/:id/reject', authenticateToken, (req: Request, res: Respon
     db.prepare('INSERT INTO logs (user_id, action, details) VALUES (?, ?, ?)')
       .run(authReq.userId, 'REJECT_PENDING_SCORE', JSON.stringify({ pendingId }));
 
-    logger.info('拒绝待处理记录', { pendingId });
+    logger.info('Rejected pending record', { pendingId });
 
     res.json({ success: true, message: '记录已拒绝' });
   } catch (error) {
-    logger.error('拒绝待处理记录失败:', error);
-    res.status(500).json({ error: '拒绝待处理记录失败' });
+    logger.error('Rejected pending record失败:', error);
+    res.status(500).json({ error: 'Rejected pending record失败' });
   }
 });
 
@@ -860,7 +902,7 @@ router.get('/dashboard-stats', authenticateToken, (req: Request, res: Response) 
       recentScores: recentScores
     });
   } catch (error) {
-    logger.error('获取首页统计数据失败:', error);
+    logger.error('Failed to get homepage statistics:', error);
     res.status(500).json({ error: '获取首页统计数据失败' });
   }
 });

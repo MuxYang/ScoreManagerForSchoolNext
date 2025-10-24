@@ -38,14 +38,14 @@ export function generateOneTimeToken(): string {
  */
 export function validateAndConsumeToken(token: string | undefined): boolean {
   if (!token || typeof token !== 'string' || token.length !== TOKEN_LENGTH) {
-    logger.warn('无效的token格式');
+    logger.warn('Invalid token format');
     return false;
   }
   
   const tokenData = tokenStore.get(token);
   
   if (!tokenData) {
-    logger.warn('token不存在或已过期', { 
+    logger.warn('Token does not exist or has expired', { 
       tokenPrefix: token.substring(0, 8) 
     });
     return false;
@@ -53,7 +53,7 @@ export function validateAndConsumeToken(token: string | undefined): boolean {
   
   // 检查是否已使用
   if (tokenData.used) {
-    logger.warn('token已被使用', { 
+    logger.warn('Token already used', { 
       tokenPrefix: token.substring(0, 8) 
     });
     tokenStore.delete(token); // 删除已使用的token
@@ -63,7 +63,7 @@ export function validateAndConsumeToken(token: string | undefined): boolean {
   // 检查是否过期
   const age = Date.now() - tokenData.createdAt;
   if (age > TOKEN_EXPIRY_MS) {
-    logger.warn('token已过期', { 
+    logger.warn('Token expired', { 
       tokenPrefix: token.substring(0, 8),
       ageMs: age 
     });
@@ -117,7 +117,7 @@ export function getTokenStats() {
 // 定期清理过期token
 setInterval(cleanupExpiredTokens, CLEANUP_INTERVAL_MS);
 
-logger.info('一次性token系统已初始化', { 
+logger.info('One-time token system initialized', { 
   tokenLength: TOKEN_LENGTH,
   expiryMs: TOKEN_EXPIRY_MS 
 });
