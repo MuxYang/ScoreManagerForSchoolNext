@@ -125,6 +125,24 @@ export function initializeDatabase() {
     )
   `);
 
+  // Teacher quantification records table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS teacher_scores (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      teacher_id INTEGER NOT NULL,
+      teacher_name TEXT NOT NULL,
+      points REAL NOT NULL,
+      reason TEXT,
+      class TEXT,
+      subject TEXT,
+      date DATE DEFAULT CURRENT_DATE,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      created_by INTEGER,
+      FOREIGN KEY (teacher_id) REFERENCES teachers(id) ON DELETE CASCADE,
+      FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+    )
+  `);
+
   // 待处理量化记录表（用于AI导入时无法精确匹配的记录）
   db.exec(`
     CREATE TABLE IF NOT EXISTS pending_scores (
@@ -169,6 +187,8 @@ export function initializeDatabase() {
     CREATE INDEX IF NOT EXISTS idx_students_class ON students(class);
     CREATE INDEX IF NOT EXISTS idx_scores_student_id ON scores(student_id);
     CREATE INDEX IF NOT EXISTS idx_scores_date ON scores(date);
+    CREATE INDEX IF NOT EXISTS idx_teacher_scores_teacher_id ON teacher_scores(teacher_id);
+    CREATE INDEX IF NOT EXISTS idx_teacher_scores_date ON teacher_scores(date);
     CREATE INDEX IF NOT EXISTS idx_logs_user_id ON logs(user_id);
     CREATE INDEX IF NOT EXISTS idx_logs_created_at ON logs(created_at);
   `);

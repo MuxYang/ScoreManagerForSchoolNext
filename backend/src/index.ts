@@ -32,9 +32,10 @@ const app = express();
 const PORT = parseInt(process.env.PORT || '3000', 10);
 const HOST = process.env.HOST || '0.0.0.0'; // Allow LAN connections
 
-// Configure trust proxy to correctly read client IP
-// This enables req.ip to work properly behind proxies
-app.set('trust proxy', true);
+// Configure trust proxy - only trust loopback for security
+// For LAN applications, we don't expect external proxies
+// 'loopback' trusts only 127.0.0.1 and ::1
+app.set('trust proxy', 'loopback');
 
 // Initialize server session ID (generates new one on each startup)
 const sessionId = initializeServerSessionId();

@@ -659,17 +659,58 @@ router.post('/import-records/process-teachers', authenticateToken, (req: Request
     const errors: string[] = [];
 
     if (action === 'teacher') {
-      // 导入为教师量化记录
-      // TODO: 实现教师量化表（如果需要）
-      // 目前简单记录到scores表，teacher_name字段存储被记录的教师
-      const insertScore = db.prepare(`
-        INSERT INTO scores (student_id, points, reason, teacher_name, date)
-        VALUES (?, ?, ?, ?, ?)
+      // Import as teacher quantification records
+      const authReq = req as AuthRequest;
+      const teachers = db.prepare('SELECT id, name, subject FROM teachers').all() as any[];
+      const insertTeacherScore = db.prepare(`
+        INSERT INTO teacher_scores (teacher_id, teacher_name, points, reason, class, subject, date, created_by)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       `);
 
-      // 使用一个特殊的student_id（如-1）表示这是教师记录
-      // 或者创建单独的teacher_scores表
-      errors.push('教师量化功能尚未完全实现');
+      records.forEach((record: any, index: number) => {
+        try {
+          const { name, class: className, reason, points, subject, date } = record;
+          
+          // Find matching teacher by name
+          let matchedTeacher = teachers.find(t => t.name === name);
+          
+          // If not found by exact name, try by name and subject
+          if (!matchedTeacher && subject) {
+            matchedTeacher = teachers.find(t => t.name === name && t.subject === subject);
+          }
+          
+          if (matchedTeacher) {
+            insertTeacherScore.run(
+              matchedTeacher.id,
+              name,
+              points || 2,
+              reason || '',
+              className || '',
+              subject || matchedTeacher.subject || '',
+              date || new Date().toISOString().split('T')[0],
+              authReq.userId
+            );
+            successCount++;
+            logger.info('Teacher record imported successfully', {
+              recordIndex: index + 1,
+              teacherName: name,
+              teacherId: matchedTeacher.id
+            });
+          } else {
+            errors.push(`Record ${index + 1} (${name}): Teacher not found in database`);
+            logger.warn('Teacher record import failed: Teacher not found', {
+              recordIndex: index + 1,
+              teacherName: name
+            });
+          }
+        } catch (error: any) {
+          errors.push(`Record ${index + 1}: ${error.message}`);
+          logger.error('Teacher record import error', {
+            recordIndex: index + 1,
+            error: error.message
+          });
+        }
+      });
       
     } else if (action === 'student') {
       // 将教师姓名作为学生姓名重新匹配导入
