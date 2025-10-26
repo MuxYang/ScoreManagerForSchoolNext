@@ -1,6 +1,7 @@
 import axios from 'axios';
 
-const API_BASE_URL = '/api';
+// 根据环境选择 API 基础 URL
+const API_BASE_URL = import.meta.env.DEV ? '/api' : 'http://localhost:3000/api';
 
 const apiClient = axios.create({
   baseURL: API_BASE_URL,

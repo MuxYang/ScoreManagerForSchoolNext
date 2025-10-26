@@ -223,8 +223,8 @@ $frontendLog = Join-Path $PSScriptRoot "logs\frontend.log"
 # Clear old frontend log
 "" | Out-File $frontendLog -Encoding UTF8
 
-# Use http-server for static file serving (without -a flag to allow LAN access)
-$frontendProcess = Start-Process -FilePath "powershell" -ArgumentList "-NoProfile", "-Command", "cd '$distPath'; npx --yes http-server . -p 5173 --gzip -c-1 > '$frontendLog' 2>&1" -PassThru -WindowStyle Hidden
+# Use http-server for static file serving with SPA support (HTTP only)
+$frontendProcess = Start-Process -FilePath "powershell" -ArgumentList "-NoProfile", "-Command", "cd '$distPath'; npx --yes http-server . -p 5173 --gzip -c-1 -d false > '$frontendLog' 2>&1" -PassThru -WindowStyle Hidden
 
 Start-Sleep -Seconds 6
 
@@ -341,6 +341,19 @@ Write-Host "========================================" -ForegroundColor Cyan
 Write-Host "   Real-time System Logs" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
+Write-Host "📋 Log Format:" -ForegroundColor Yellow
+Write-Host "  [BACKEND]  - Backend service logs (API, database, system)" -ForegroundColor Blue
+Write-Host "  [FRONTEND] - Frontend service logs (HTTP requests, errors)" -ForegroundColor Cyan
+Write-Host "  [BACKEND ERROR] - Backend error logs" -ForegroundColor Red
+Write-Host ""
+Write-Host "🎨 Color Legend:" -ForegroundColor Yellow
+Write-Host "  🔴 Red     - Errors and failures" -ForegroundColor Red
+Write-Host "  🟢 Green   - Success and startup messages" -ForegroundColor Green
+Write-Host "  🟡 Yellow  - Warnings and admin info" -ForegroundColor Yellow
+Write-Host "  🔵 Blue    - API requests" -ForegroundColor Blue
+Write-Host "  🟣 Magenta - Important page requests" -ForegroundColor Magenta
+Write-Host "  ⚪ White   - General information" -ForegroundColor White
+Write-Host ""
 Write-Host "TIP: Press Ctrl+C to stop system" -ForegroundColor Yellow
 Write-Host ""
 
@@ -370,23 +383,29 @@ try {
                 if ($currentLineCount -gt $lastBackendLineCount) {
                     $newLines = $logContent[$lastBackendLineCount..($currentLineCount - 1)]
                     foreach ($line in $newLines) {
-                        # Filter out unnecessary information
-                        if ($line -like "*Session ID*" -or $line -like "*sessionId*" -or $line -like "*http://127.0.0.1*") {
-                            # Skip these lines
+                        # Filter out only very verbose information
+                        if ($line -like "*Session ID*" -or $line -like "*sessionId*") {
+                            # Skip session ID logs
                             continue
                         }
                         
                         # Highlight important information
-                        if ($line -match "admin|password|Account") {
+                        if ($line -match "admin|password|Account|Admin") {
                             Write-Host "[BACKEND] $line" -ForegroundColor Yellow -BackgroundColor DarkRed
                         } elseif ($line -match "error|Error|failed|Failed") {
                             Write-Host "[BACKEND] $line" -ForegroundColor Red
-                        } elseif ($line -match "success|Success|completed|Completed") {
+                        } elseif ($line -match "success|Success|completed|Completed|OK") {
                             Write-Host "[BACKEND] $line" -ForegroundColor Green
                         } elseif ($line -match "warning|Warning") {
                             Write-Host "[BACKEND] $line" -ForegroundColor Yellow
+                        } elseif ($line -match "GET|POST|PUT|DELETE") {
+                            # Show API requests
+                            Write-Host "[BACKEND] $line" -ForegroundColor Blue
+                        } elseif ($line -match "info:|Server running|Database initialized") {
+                            # Show important system info
+                            Write-Host "[BACKEND] $line" -ForegroundColor Cyan
                         } else {
-                            Write-Host "[BACKEND] $line"
+                            Write-Host "[BACKEND] $line" -ForegroundColor White
                         }
                     }
                     $lastBackendLineCount = $currentLineCount
@@ -402,19 +421,22 @@ try {
                 if ($currentFrontendLineCount -gt $lastFrontendLineCount) {
                     $newFrontendLines = $frontendContent[$lastFrontendLineCount..($currentFrontendLineCount - 1)]
                     foreach ($line in $newFrontendLines) {
-                        # Filter out unnecessary frontend information
-                        if ($line -like "*GET /" -or $line -like "*200*" -or $line -like "*304*") {
-                            # Skip common HTTP requests
+                        # Filter out unnecessary frontend information (less aggressive filtering)
+                        if ($line -like "*GET /assets/*" -or $line -like "*GET /vite.svg*" -or $line -like "*304*") {
+                            # Skip common static file requests
                             continue
                         }
                         
                         # Highlight frontend information
                         if ($line -match "error|Error|failed|Failed") {
                             Write-Host "[FRONTEND] $line" -ForegroundColor Red
-                        } elseif ($line -match "started|listening|ready") {
+                        } elseif ($line -match "started|listening|ready|Starting up") {
                             Write-Host "[FRONTEND] $line" -ForegroundColor Green
-                        } elseif ($line -match "warning|Warning") {
+                        } elseif ($line -match "warning|Warning|deprecated") {
                             Write-Host "[FRONTEND] $line" -ForegroundColor Yellow
+                        } elseif ($line -match "GET /" -and $line -notlike "*assets*") {
+                            # Show important page requests
+                            Write-Host "[FRONTEND] $line" -ForegroundColor Magenta
                         } else {
                             Write-Host "[FRONTEND] $line" -ForegroundColor Cyan
                         }

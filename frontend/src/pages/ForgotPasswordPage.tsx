@@ -14,7 +14,6 @@ import {
 import { authAPI } from '../services/api';
 import { 
   validateUsername, 
-  validatePassword, 
   validateSecurityQuestion, 
   validateSecurityAnswer,
   validatePasswordStrength,

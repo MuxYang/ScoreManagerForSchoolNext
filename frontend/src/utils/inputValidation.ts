@@ -1,11 +1,21 @@
 // 前端输入验证工具函数
+import React from 'react';
+
 export interface ValidationResult {
   valid: boolean;
   error?: string;
 }
 
+// 输入验证规则类型
+interface ValidationRule {
+  minLength?: number;
+  maxLength: number;
+  pattern: RegExp;
+  errorMessage: string;
+}
+
 // 输入验证规则
-const VALIDATION_RULES = {
+const VALIDATION_RULES: Record<string, ValidationRule> = {
   username: {
     minLength: 3,
     maxLength: 20,
@@ -54,7 +64,7 @@ export function validateInput(
   const rules = VALIDATION_RULES[type];
   
   // 长度验证
-  if (trimmedInput.length < rules.minLength) {
+  if (rules.minLength && trimmedInput.length < rules.minLength) {
     return { valid: false, error: `输入长度至少为${rules.minLength}位` };
   }
   
@@ -164,3 +174,4 @@ export function useInputValidation(type: keyof typeof VALIDATION_RULES = 'genera
     handleChange
   };
 }
+
