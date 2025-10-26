@@ -92,8 +92,11 @@ export const authAPI = {
   getSecurityQuestion: (username: string) =>
     apiClient.post('/auth/security-question', { username }),
   
-  resetPassword: (username: string, securityAnswer: string, newPassword: string, newSecurityQuestion: string) =>
-    apiClient.post('/auth/reset-password', { username, securityAnswer, newPassword, newSecurityQuestion }),
+  verifySecurityAnswer: (username: string, securityAnswer: string) =>
+    apiClient.post('/auth/verify-security-answer', { username, securityAnswer }),
+  
+  resetPassword: (username: string, securityAnswer: string, newPassword: string, newSecurityQuestion: string, newSecurityAnswer: string) =>
+    apiClient.post('/auth/reset-password', { username, securityAnswer, newPassword, newSecurityQuestion, newSecurityAnswer }),
   
   changePassword: (userId: number, oldPassword: string, newPassword: string) =>
     apiClient.post('/auth/change-password', { userId, oldPassword, newPassword }),
@@ -192,6 +195,50 @@ export const userConfigAPI = {
   save: (config: any) => apiClient.post('/user-config/save', { config }),
   get: () => apiClient.get('/user-config/get'),
   clear: () => apiClient.post('/user-config/clear'),
+};
+
+// 听课记录 API
+export const lectureRecordsAPI = {
+  getAll: (filters?: {
+    startDate?: string;
+    endDate?: string;
+    observerName?: string;
+    teachingName?: string;
+    className?: string;
+  }) => apiClient.get('/lecture-records', { params: filters }),
+  
+  getById: (id: number) => apiClient.get(`/lecture-records/${id}`),
+  
+  create: (data: {
+    observerTeacherName: string;
+    teachingTeacherName: string;
+    className: string;
+    date?: string;
+    notes?: string;
+  }) => apiClient.post('/lecture-records', data),
+  
+  update: (id: number, data: {
+    observerTeacherName: string;
+    teachingTeacherName: string;
+    className: string;
+    date: string;
+    notes?: string;
+  }) => apiClient.put(`/lecture-records/${id}`, data),
+  
+  delete: (id: number) => apiClient.delete(`/lecture-records/${id}`),
+  
+  batchCreate: (records: any[]) => 
+    apiClient.post('/lecture-records/batch', { records }),
+  
+  export: async (startDate?: string, endDate?: string) => {
+    const response = await apiClient.post('/lecture-records/export', 
+      { startDate, endDate },
+      { responseType: 'blob' }
+    );
+    return response;
+  },
+  
+  getStatistics: () => apiClient.get('/lecture-records/statistics'),
 };
 
 export default apiClient;

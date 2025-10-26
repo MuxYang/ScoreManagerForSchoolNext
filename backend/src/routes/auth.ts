@@ -53,9 +53,9 @@ function getJwtExpiresIn(): string {
 // 速率限制配置
 // 登录端点严格限制（防止暴力破解）
 const loginLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 分钟窗口
+  windowMs: 60 * 1000, // 1 分钟窗口
   max: 5, // 最多 5 次尝试
-  message: '登录尝试次数过多，请15分钟后再试',
+  message: '登录尝试次数过多，请1分钟后再试',
   standardHeaders: true, // 返回 RateLimit-* 响应头
   legacyHeaders: false,
   handler: (req, res) => {
@@ -64,7 +64,7 @@ const loginLimiter = rateLimit({
       userAgent: req.headers['user-agent']
     });
     res.status(429).json({ 
-      error: '登录尝试次数过多，请15分钟后再试' 
+      error: '登录尝试次数过多，请1分钟后再试' 
     });
   }
 });
@@ -283,6 +283,16 @@ router.post('/security-question', (req: Request, res: Response) => {
       return res.status(400).json({ error: '用户名是必填的' });
     }
 
+    // 输入验证和防注入处理
+    const inputValidation = validateInput(username, { maxLength: 20 });
+    if (!inputValidation.valid) {
+      logger.warn('Security question request blocked: Malicious input detected', { 
+        usernameHash: sanitizeForLogging(username, { type: 'hash' }),
+        ip: normalizeIp(req)
+      });
+      return res.status(400).json({ error: '输入包含非法字符' });
+    }
+
     const user = db.prepare('SELECT security_question FROM users WHERE username = ?').get(username) as any;
     if (!user) {
       return res.status(404).json({ error: '用户不存在' });
@@ -295,13 +305,96 @@ router.post('/security-question', (req: Request, res: Response) => {
   }
 });
 
+// 验证密保答案
+router.post('/verify-security-answer', (req: Request, res: Response) => {
+  try {
+    const { username, securityAnswer } = req.body;
+
+    if (!username || !securityAnswer) {
+      return res.status(400).json({ error: '用户名和密保答案是必填的' });
+    }
+
+    // 输入验证和防注入处理
+    const usernameValidation = validateInput(username, { maxLength: 20 });
+    if (!usernameValidation.valid) {
+      logger.warn('Security answer verification blocked: Malicious username input', { 
+        usernameHash: sanitizeForLogging(username, { type: 'hash' }),
+        ip: normalizeIp(req)
+      });
+      return res.status(400).json({ error: '用户名包含非法字符' });
+    }
+
+    const answerValidation = validateInput(securityAnswer, { maxLength: 100 });
+    if (!answerValidation.valid) {
+      logger.warn('Security answer verification blocked: Malicious answer input', { 
+        usernameHash: sanitizeForLogging(username, { type: 'hash' }),
+        ip: normalizeIp(req)
+      });
+      return res.status(400).json({ error: '密保答案包含非法字符' });
+    }
+
+    const user = db.prepare('SELECT * FROM users WHERE username = ?').get(username) as any;
+    if (!user) {
+      return res.status(404).json({ error: '用户不存在' });
+    }
+
+    // 验证密保答案
+    try {
+      decryptPassword(user.encrypted_password, securityAnswer);
+      res.json({ valid: true, message: '密保答案正确' });
+    } catch {
+      res.status(401).json({ valid: false, error: '密保答案错误' });
+    }
+  } catch (error) {
+    logger.error('Failed to verify security answer:', error);
+    res.status(500).json({ error: '验证密保答案失败' });
+  }
+});
+
 // 重置密码（应用速率限制）
 router.post('/reset-password', passwordResetLimiter, async (req: Request, res: Response) => {
   try {
-    const { username, securityAnswer, newPassword, newSecurityQuestion } = req.body;
+    const { username, securityAnswer, newPassword, newSecurityQuestion, newSecurityAnswer } = req.body;
 
-    if (!username || !securityAnswer || !newPassword || !newSecurityQuestion) {
+    if (!username || !securityAnswer || !newPassword || !newSecurityQuestion || !newSecurityAnswer) {
       return res.status(400).json({ error: '所有字段都是必填的' });
+    }
+
+    // 输入验证和防注入处理
+    const usernameValidation = validateInput(username, { maxLength: 20 });
+    if (!usernameValidation.valid) {
+      logger.warn('Password reset blocked: Malicious username input', { 
+        usernameHash: sanitizeForLogging(username, { type: 'hash' }),
+        ip: normalizeIp(req)
+      });
+      return res.status(400).json({ error: '用户名包含非法字符' });
+    }
+
+    const answerValidation = validateInput(securityAnswer, { maxLength: 100 });
+    if (!answerValidation.valid) {
+      logger.warn('Password reset blocked: Malicious security answer input', { 
+        usernameHash: sanitizeForLogging(username, { type: 'hash' }),
+        ip: normalizeIp(req)
+      });
+      return res.status(400).json({ error: '密保答案包含非法字符' });
+    }
+
+    const newQuestionValidation = validateInput(newSecurityQuestion, { maxLength: 200 });
+    if (!newQuestionValidation.valid) {
+      logger.warn('Password reset blocked: Malicious new security question input', { 
+        usernameHash: sanitizeForLogging(username, { type: 'hash' }),
+        ip: normalizeIp(req)
+      });
+      return res.status(400).json({ error: '新密保问题包含非法字符' });
+    }
+
+    const newAnswerValidation = validateInput(newSecurityAnswer, { maxLength: 100 });
+    if (!newAnswerValidation.valid) {
+      logger.warn('Password reset blocked: Malicious new security answer input', { 
+        usernameHash: sanitizeForLogging(username, { type: 'hash' }),
+        ip: normalizeIp(req)
+      });
+      return res.status(400).json({ error: '新密保答案包含非法字符' });
     }
 
     // 验证新密码格式
@@ -321,27 +414,34 @@ router.post('/reset-password', passwordResetLimiter, async (req: Request, res: R
       return res.status(404).json({ error: '用户不存在' });
     }
 
-    // 尝试解密旧密码验证密保答案
+    // 验证旧密保答案
     try {
       decryptPassword(user.encrypted_password, securityAnswer);
     } catch {
       return res.status(401).json({ error: '密保答案错误' });
     }
 
-    // 加密新密码
+    // 加密新密码（使用新的密保答案）
     const passwordHash = await bcrypt.hash(newPassword, 10);
-    const encryptedPassword = encryptPassword(newPassword, securityAnswer);
+    const encryptedPassword = encryptPassword(newPassword, newSecurityAnswer);
 
-    // 更新密码
+    // 更新密码、密保问题和密保答案
     db.prepare(`
       UPDATE users 
-      SET password_hash = ?, security_question = ?, encrypted_password = ?, updated_at = CURRENT_TIMESTAMP
+      SET password_hash = ?, 
+          security_question = ?, 
+          encrypted_password = ?, 
+          updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
     `).run(passwordHash, newSecurityQuestion, encryptedPassword, user.id);
 
-    logger.info('Password reset successful', { username, userId: user.id });
+    logger.info('Password reset successful', { 
+      username, 
+      userId: user.id,
+      newSecurityQuestion: sanitizeForLogging(newSecurityQuestion, { type: 'hash' })
+    });
 
-    res.json({ message: '密码重置成功' });
+    res.json({ message: '密码和密保信息重置成功' });
   } catch (error) {
     logger.error('Password reset failed:', error);
     res.status(500).json({ error: '密码重置失败' });

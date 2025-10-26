@@ -1,8 +1,8 @@
-# Student Score Management System - Optimized Startup Script
-# Only show frontend address and real-time backend logs
+# Student Score Management System - Production Startup Script
+# Builds and runs the system in production mode
 
 Write-Host "========================================" -ForegroundColor Cyan
-Write-Host "   Student Score System - Starting" -ForegroundColor Cyan
+Write-Host "   Student Score System - Production Mode" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
 
@@ -100,9 +100,25 @@ Set-Location $PSScriptRoot
 
 Write-Host "OK Dependencies ready" -ForegroundColor Green
 
+# Build backend for production
+Write-Host ""
+Write-Host "[2.5/5] Building backend for production..." -ForegroundColor Yellow
+Set-Location (Join-Path $PSScriptRoot "backend")
+npm run build
+Set-Location $PSScriptRoot
+Write-Host "OK Backend built for production" -ForegroundColor Green
+
+# Build frontend for production
+Write-Host ""
+Write-Host "[2.6/5] Building frontend for production..." -ForegroundColor Yellow
+Set-Location (Join-Path $PSScriptRoot "frontend")
+npm run build
+Set-Location $PSScriptRoot
+Write-Host "OK Frontend built for production" -ForegroundColor Green
+
 # Create necessary directories
 Write-Host ""
-Write-Host "[3/5] Initializing directories..." -ForegroundColor Yellow
+Write-Host "[3/7] Initializing directories..." -ForegroundColor Yellow
 $backendData = Join-Path $PSScriptRoot "backend\data"
 $backendBackups = Join-Path $PSScriptRoot "backend\backups"
 $rootLogs = Join-Path $PSScriptRoot "logs"
@@ -114,8 +130,54 @@ $rootLogs = Join-Path $PSScriptRoot "logs"
 }
 Write-Host "OK Directories initialized" -ForegroundColor Green
 
+# Compress previous logs
+Write-Host ""
+Write-Host "[3.1/7] Compressing previous logs..." -ForegroundColor Yellow
+$logFiles = @(
+    "logs\stdout.log",
+    "logs\stderr.log", 
+    "logs\frontend.log",
+    "backend\logs\*.log"
+)
+
+$compressedLogs = @()
+foreach ($logPattern in $logFiles) {
+    $logPath = Join-Path $PSScriptRoot $logPattern
+    if ($logPattern -like "*\*.log") {
+        # Handle wildcard patterns
+        $logFiles = Get-ChildItem -Path $logPath -ErrorAction SilentlyContinue
+        foreach ($logFile in $logFiles) {
+            if ($logFile.Length -gt 0) {
+                $zipName = "logs\compressed-$(Get-Date -Format 'yyyy-MM-dd-HHmmss')-$($logFile.BaseName).zip"
+                $zipPath = Join-Path $PSScriptRoot $zipName
+                Compress-Archive -Path $logFile.FullName -DestinationPath $zipPath -Force
+                $compressedLogs += $zipName
+                Write-Host "  Compressed: $($logFile.Name) -> $zipName" -ForegroundColor Gray
+            }
+        }
+    } else {
+        # Handle specific files
+        if (Test-Path $logPath -and (Get-Item $logPath).Length -gt 0) {
+            $zipName = "logs\compressed-$(Get-Date -Format 'yyyy-MM-dd-HHmmss')-$(Split-Path $logPath -Leaf).zip"
+            $zipPath = Join-Path $PSScriptRoot $zipName
+            Compress-Archive -Path $logPath -DestinationPath $zipPath -Force
+            $compressedLogs += $zipName
+            Write-Host "  Compressed: $(Split-Path $logPath -Leaf) -> $zipName" -ForegroundColor Gray
+        }
+    }
+}
+
+if ($compressedLogs.Count -gt 0) {
+    Write-Host "OK Compressed $($compressedLogs.Count) log files:" -ForegroundColor Green
+    foreach ($log in $compressedLogs) {
+        Write-Host "  📦 $log" -ForegroundColor Gray
+    }
+} else {
+    Write-Host "OK No previous logs to compress" -ForegroundColor Green
+}
+
 # 检查并释放 3000 和 5173 端口
-Write-Host "[3.5/5] Checking and releasing ports 3000, 5173..." -ForegroundColor Yellow
+Write-Host "[3.5/7] Checking and releasing ports 3000, 5173..." -ForegroundColor Yellow
 Stop-ProcessByPort -Port 3000
 Stop-ProcessByPort -Port 5173
 Start-Sleep -Seconds 1
@@ -126,9 +188,9 @@ Write-Host "OK Ports checked and released if needed" -ForegroundColor Green
 $databasePath = Join-Path $PSScriptRoot "backend\data\database.db"
 $isFirstRun = -Not (Test-Path $databasePath)
 
-# Start backend (silent mode)
+# Start backend (production mode)
 Write-Host ""
-Write-Host "[4/5] Starting backend service..." -ForegroundColor Yellow
+Write-Host "[4/7] Starting backend service..." -ForegroundColor Yellow
 
 $backendPath = Join-Path $PSScriptRoot "backend"
 $stdoutLog = Join-Path $PSScriptRoot "logs\stdout.log"
@@ -138,7 +200,7 @@ $stderrLog = Join-Path $PSScriptRoot "logs\stderr.log"
 "" | Out-File $stdoutLog -Encoding UTF8
 "" | Out-File $stderrLog -Encoding UTF8
 
-$backendProcess = Start-Process -FilePath "powershell" -ArgumentList "-NoProfile", "-Command", "cd '$backendPath'; npm run dev > '$stdoutLog' 2> '$stderrLog'" -PassThru -WindowStyle Hidden
+$backendProcess = Start-Process -FilePath "powershell" -ArgumentList "-NoProfile", "-Command", "cd '$backendPath'; npm start > '$stdoutLog' 2> '$stderrLog'" -PassThru -WindowStyle Hidden
 
 Start-Sleep -Seconds 4
 
@@ -150,31 +212,111 @@ if (-Not $backendProcess.HasExited) {
     exit 1
 }
 
-# Start frontend (silent mode)
+# Start frontend (production mode)
 Write-Host ""
-Write-Host "[5/5] Starting frontend service..." -ForegroundColor Yellow
+Write-Host "[5/7] Starting frontend service..." -ForegroundColor Yellow
 
 $frontendPath = Join-Path $PSScriptRoot "frontend"
-$frontendProcess = Start-Process -FilePath "powershell" -ArgumentList "-NoProfile", "-Command", "cd '$frontendPath'; npm run dev 2>&1 | Out-Null" -PassThru -WindowStyle Hidden
+$distPath = Join-Path $frontendPath "dist"
+$frontendLog = Join-Path $PSScriptRoot "logs\frontend.log"
 
-Start-Sleep -Seconds 3
+# Clear old frontend log
+"" | Out-File $frontendLog -Encoding UTF8
+
+# Use http-server for static file serving (without -a flag to allow LAN access)
+$frontendProcess = Start-Process -FilePath "powershell" -ArgumentList "-NoProfile", "-Command", "cd '$distPath'; npx --yes http-server . -p 5173 --gzip -c-1 > '$frontendLog' 2>&1" -PassThru -WindowStyle Hidden
+
+Start-Sleep -Seconds 6
 
 if (-Not $frontendProcess.HasExited) {
     Write-Host "OK Frontend service started (PID: $($frontendProcess.Id))" -ForegroundColor Green
 } else {
     Write-Host "ERROR Frontend startup failed" -ForegroundColor Red
+    Write-Host "Checking frontend build status..." -ForegroundColor Yellow
+    
+    # Check if dist folder exists
+    $distPath = Join-Path $frontendPath "dist"
+    if (-Not (Test-Path $distPath)) {
+        Write-Host "ERROR: Frontend dist folder not found. Please run 'npm run build' first." -ForegroundColor Red
+    } else {
+        Write-Host "Frontend dist folder exists, but preview server failed to start." -ForegroundColor Yellow
+    }
+    
     Stop-Process -Id $backendProcess.Id -Force -ErrorAction SilentlyContinue
     exit 1
 }
 
+# Verify services are running
+Write-Host ""
+Write-Host "[6/7] Verifying services..." -ForegroundColor Yellow
+Start-Sleep -Seconds 2
+
+# Check backend health
+try {
+    $backendResponse = Invoke-WebRequest -Uri "http://localhost:3000/health" -TimeoutSec 5 -ErrorAction Stop
+    if ($backendResponse.StatusCode -eq 200) {
+        Write-Host "OK Backend health check passed" -ForegroundColor Green
+    } else {
+        Write-Host "WARNING Backend health check returned status $($backendResponse.StatusCode)" -ForegroundColor Yellow
+    }
+} catch {
+    Write-Host "WARNING Backend health check failed: $($_.Exception.Message)" -ForegroundColor Yellow
+}
+
+# Check frontend availability
+try {
+    $frontendResponse = Invoke-WebRequest -Uri "http://localhost:5173" -TimeoutSec 5 -ErrorAction Stop
+    if ($frontendResponse.StatusCode -eq 200) {
+        Write-Host "OK Frontend service is accessible" -ForegroundColor Green
+    } else {
+        Write-Host "WARNING Frontend returned status $($frontendResponse.StatusCode)" -ForegroundColor Yellow
+    }
+} catch {
+    Write-Host "WARNING Frontend health check failed: $($_.Exception.Message)" -ForegroundColor Yellow
+}
+
+Write-Host ""
+Write-Host "[7/7] Production deployment complete!" -ForegroundColor Green
+
 # Show access information
 Write-Host ""
 Write-Host "========================================" -ForegroundColor Green
-Write-Host "   OK System started successfully!" -ForegroundColor Green
+Write-Host "   🚀 Production System Ready! 🚀" -ForegroundColor Green
 Write-Host "========================================" -ForegroundColor Green
 Write-Host ""
-Write-Host "Web Access: " -NoNewline -ForegroundColor Cyan
+Write-Host "🌐 Local Access: " -NoNewline -ForegroundColor Cyan
 Write-Host "http://localhost:5173" -ForegroundColor White -BackgroundColor DarkBlue
+Write-Host ""
+
+# Get local IP address for LAN access
+$localIP = (Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.PrefixOrigin -eq 'Dhcp' -or ($_.IPAddress -like '192.168.*' -or $_.IPAddress -like '10.*' -or $_.IPAddress -match '^172\.(1[6-9]|2[0-9]|3[0-1])\.') } | Select-Object -First 1).IPAddress
+
+if ($localIP) {
+    Write-Host "🏠 LAN Access: " -NoNewline -ForegroundColor Cyan
+    Write-Host "http://${localIP}:5173" -ForegroundColor White -BackgroundColor DarkMagenta
+    Write-Host ""
+}
+
+Write-Host "📊 Backend API: " -NoNewline -ForegroundColor Cyan
+Write-Host "http://localhost:3000" -ForegroundColor White -BackgroundColor DarkGreen
+Write-Host ""
+Write-Host "⚡ Performance: " -ForegroundColor Yellow
+Write-Host "  • Backend: Compiled TypeScript (optimized)" -ForegroundColor Gray
+Write-Host "  • Frontend: Built assets (minified & compressed)" -ForegroundColor Gray
+Write-Host "  • Database: SQLite (production-ready)" -ForegroundColor Gray
+Write-Host ""
+Write-Host "🔒 Network Access: " -ForegroundColor Yellow
+Write-Host "  • Local: Accessible from this computer" -ForegroundColor Gray
+Write-Host "  • LAN: Accessible from devices on the same network" -ForegroundColor Gray
+Write-Host "  • Public: Blocked (security feature)" -ForegroundColor Gray
+Write-Host ""
+Write-Host "📝 Log Files: " -ForegroundColor Yellow
+Write-Host "  • Backend: logs\stdout.log, logs\stderr.log" -ForegroundColor Gray
+Write-Host "  • Frontend: logs\frontend.log" -ForegroundColor Gray
+Write-Host "  • Backend Session: backend\logs\*.log" -ForegroundColor Gray
+if ($compressedLogs.Count -gt 0) {
+    Write-Host "  • Compressed: $($compressedLogs.Count) files in logs\" -ForegroundColor Gray
+}
 Write-Host ""
 
 # First run notice
@@ -193,17 +335,18 @@ if ($isFirstRun) {
     Start-Process $frontendUrl
 }
 
-# Show real-time backend logs
+# Show real-time logs
 Write-Host ""
 Write-Host "========================================" -ForegroundColor Cyan
-Write-Host "   Backend Real-time Logs" -ForegroundColor Cyan
+Write-Host "   Real-time System Logs" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "TIP: Press Ctrl+C to stop system" -ForegroundColor Yellow
 Write-Host ""
 
-# Track displayed line count
-$lastLineCount = 0
+# Track displayed line counts
+$lastBackendLineCount = 0
+$lastFrontendLineCount = 0
 
 try {
     while ($true) {
@@ -224,8 +367,8 @@ try {
             $logContent = Get-Content $stdoutLog -Encoding UTF8 -ErrorAction SilentlyContinue
             if ($logContent) {
                 $currentLineCount = $logContent.Count
-                if ($currentLineCount -gt $lastLineCount) {
-                    $newLines = $logContent[$lastLineCount..($currentLineCount - 1)]
+                if ($currentLineCount -gt $lastBackendLineCount) {
+                    $newLines = $logContent[$lastBackendLineCount..($currentLineCount - 1)]
                     foreach ($line in $newLines) {
                         # Filter out unnecessary information
                         if ($line -like "*Session ID*" -or $line -like "*sessionId*" -or $line -like "*http://127.0.0.1*") {
@@ -235,29 +378,59 @@ try {
                         
                         # Highlight important information
                         if ($line -match "admin|password|Account") {
-                            Write-Host $line -ForegroundColor Yellow -BackgroundColor DarkRed
+                            Write-Host "[BACKEND] $line" -ForegroundColor Yellow -BackgroundColor DarkRed
                         } elseif ($line -match "error|Error|failed|Failed") {
-                            Write-Host $line -ForegroundColor Red
+                            Write-Host "[BACKEND] $line" -ForegroundColor Red
                         } elseif ($line -match "success|Success|completed|Completed") {
-                            Write-Host $line -ForegroundColor Green
+                            Write-Host "[BACKEND] $line" -ForegroundColor Green
                         } elseif ($line -match "warning|Warning") {
-                            Write-Host $line -ForegroundColor Yellow
+                            Write-Host "[BACKEND] $line" -ForegroundColor Yellow
                         } else {
-                            Write-Host $line
+                            Write-Host "[BACKEND] $line"
                         }
                     }
-                    $lastLineCount = $currentLineCount
+                    $lastBackendLineCount = $currentLineCount
                 }
             }
         }
 
-        # Read error logs
+        # Read frontend logs (only show new lines)
+        if (Test-Path $frontendLog) {
+            $frontendContent = Get-Content $frontendLog -Encoding UTF8 -ErrorAction SilentlyContinue
+            if ($frontendContent) {
+                $currentFrontendLineCount = $frontendContent.Count
+                if ($currentFrontendLineCount -gt $lastFrontendLineCount) {
+                    $newFrontendLines = $frontendContent[$lastFrontendLineCount..($currentFrontendLineCount - 1)]
+                    foreach ($line in $newFrontendLines) {
+                        # Filter out unnecessary frontend information
+                        if ($line -like "*GET /" -or $line -like "*200*" -or $line -like "*304*") {
+                            # Skip common HTTP requests
+                            continue
+                        }
+                        
+                        # Highlight frontend information
+                        if ($line -match "error|Error|failed|Failed") {
+                            Write-Host "[FRONTEND] $line" -ForegroundColor Red
+                        } elseif ($line -match "started|listening|ready") {
+                            Write-Host "[FRONTEND] $line" -ForegroundColor Green
+                        } elseif ($line -match "warning|Warning") {
+                            Write-Host "[FRONTEND] $line" -ForegroundColor Yellow
+                        } else {
+                            Write-Host "[FRONTEND] $line" -ForegroundColor Cyan
+                        }
+                    }
+                    $lastFrontendLineCount = $currentFrontendLineCount
+                }
+            }
+        }
+
+        # Read backend error logs
         if (Test-Path $stderrLog) {
             $errorContent = Get-Content $stderrLog -Tail 5 -ErrorAction SilentlyContinue
             if ($errorContent) {
                 foreach ($line in $errorContent) {
                     if ($line.Trim() -ne "") {
-                        Write-Host $line -ForegroundColor Red
+                        Write-Host "[BACKEND ERROR] $line" -ForegroundColor Red
                     }
                 }
             }

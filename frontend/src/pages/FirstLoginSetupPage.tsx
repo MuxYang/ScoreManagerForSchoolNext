@@ -146,7 +146,7 @@ const FirstLoginSetupPage: React.FC = () => {
 
     try {
       await authAPI.firstLoginSetup({
-        userId: user?.id,
+        userId: user?.id || 0,
         newPassword,
         securityQuestion,
         securityAnswer,

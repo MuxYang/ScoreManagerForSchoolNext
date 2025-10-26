@@ -17,6 +17,7 @@ import {
   ArrowUpload20Regular,
   ClockRegular,
   InfoRegular,
+  BookTemplate20Regular,
 } from '@fluentui/react-icons';
 import { useAuth } from '../contexts/AuthContext';
 import HomePage from './HomePage';
@@ -28,6 +29,7 @@ import BackupPage from './BackupPage';
 import SettingsPage from './SettingsPage';
 import PendingRecordsPage from './PendingRecordsPage';
 import AboutPage from './AboutPage';
+import LectureRecordsPage from './LectureRecordsPage';
 
 const useStyles = makeStyles({
   container: {
@@ -110,6 +112,7 @@ const DashboardPage: React.FC = () => {
   const menuItems = [
     { path: '/', label: '首页', icon: <Home20Regular /> },
     { path: '/scores', label: '量化管理', icon: <Trophy20Regular /> },
+    { path: '/lecture-records', label: '教师听课记录', icon: <BookTemplate20Regular /> },
     { path: '/pending', label: '待处理记录', icon: <ClockRegular /> },
     { path: '/students', label: '学生管理', icon: <People20Regular /> },
     { path: '/teachers', label: '教师管理', icon: <PersonBoard20Regular /> },
@@ -180,6 +183,7 @@ const DashboardPage: React.FC = () => {
             <Route path="/students" element={<StudentsPageComplete />} />
             <Route path="/teachers" element={<TeachersPageComplete />} />
             <Route path="/scores" element={<ScoresPageEnhanced />} />
+            <Route path="/lecture-records" element={<LectureRecordsPage />} />
             <Route path="/pending" element={<PendingRecordsPage />} />
             <Route path="/import" element={<DataImportPage />} />
             <Route path="/backup" element={<BackupPage />} />

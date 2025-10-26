@@ -12,6 +12,14 @@ import {
   Spinner,
 } from '@fluentui/react-components';
 import { authAPI } from '../services/api';
+import { 
+  validateUsername, 
+  validatePassword, 
+  validateSecurityQuestion, 
+  validateSecurityAnswer,
+  validatePasswordStrength,
+  sanitizeInput 
+} from '../utils/inputValidation';
 
 const useStyles = makeStyles({
   container: {
@@ -62,6 +70,7 @@ const ForgotPasswordPage: React.FC = () => {
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [newSecurityQuestion, setNewSecurityQuestion] = useState('');
+  const [newSecurityAnswer, setNewSecurityAnswer] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -70,8 +79,18 @@ const ForgotPasswordPage: React.FC = () => {
     setError('');
     setLoading(true);
 
+    // 输入验证
+    const usernameValidation = validateUsername(username);
+    if (!usernameValidation.valid) {
+      setError(usernameValidation.error || '用户名格式不正确');
+      setLoading(false);
+      return;
+    }
+
     try {
-      const response = await authAPI.getSecurityQuestion(username);
+      // 清理输入
+      const cleanUsername = sanitizeInput(username);
+      const response = await authAPI.getSecurityQuestion(cleanUsername);
       setSecurityQuestion(response.data.securityQuestion);
       setStep(2);
     } catch (err: any) {
@@ -81,38 +100,83 @@ const ForgotPasswordPage: React.FC = () => {
     }
   };
 
-  const handleStep2 = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!securityAnswer.trim()) {
-      setError('请输入密保答案');
-      return;
-    }
-    setError('');
-    setStep(3);
-  };
-
-  const handleStep3 = async (e: React.FormEvent) => {
+  const handleStep2 = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-
-    if (newPassword !== confirmPassword) {
-      setError('两次输入的密码不一致');
-      return;
-    }
-
-    if (!newSecurityQuestion.trim()) {
-      setError('请设置新的密保问题');
+    
+    // 输入验证
+    const answerValidation = validateSecurityAnswer(securityAnswer);
+    if (!answerValidation.valid) {
+      setError(answerValidation.error || '密保答案格式不正确');
       return;
     }
 
     setLoading(true);
 
     try {
-      await authAPI.resetPassword(username, securityAnswer, newPassword, newSecurityQuestion);
-      alert('密码重置成功！即将跳转到登录页面');
+      // 清理输入
+      const cleanUsername = sanitizeInput(username);
+      const cleanAnswer = sanitizeInput(securityAnswer);
+      
+      // 验证密保答案的正确性
+      await authAPI.verifySecurityAnswer(cleanUsername, cleanAnswer);
+      setStep(3);
+    } catch (err: any) {
+      setError(err.response?.data?.error || '密保答案错误，请重新输入');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleStep3 = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+
+    // 输入验证
+    const passwordValidation = validatePasswordStrength(newPassword);
+    if (!passwordValidation.valid) {
+      setError(passwordValidation.error || '密码强度不符合要求');
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      setError('两次输入的密码不一致');
+      return;
+    }
+
+    const questionValidation = validateSecurityQuestion(newSecurityQuestion);
+    if (!questionValidation.valid) {
+      setError(questionValidation.error || '密保问题格式不正确');
+      return;
+    }
+
+    const answerValidation = validateSecurityAnswer(newSecurityAnswer);
+    if (!answerValidation.valid) {
+      setError(answerValidation.error || '密保答案格式不正确');
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      // 清理所有输入
+      const cleanUsername = sanitizeInput(username);
+      const cleanSecurityAnswer = sanitizeInput(securityAnswer);
+      const cleanNewPassword = sanitizeInput(newPassword);
+      const cleanNewQuestion = sanitizeInput(newSecurityQuestion);
+      const cleanNewAnswer = sanitizeInput(newSecurityAnswer);
+      
+      await authAPI.resetPassword(
+        cleanUsername, 
+        cleanSecurityAnswer, 
+        cleanNewPassword, 
+        cleanNewQuestion, 
+        cleanNewAnswer
+      );
+      alert('密码和密保信息重置成功！即将跳转到登录页面');
       navigate('/login');
     } catch (err: any) {
-      setError(err.response?.data?.error || '密码重置失败，请检查密保答案是否正确');
+      setError(err.response?.data?.error || '密码重置失败');
     } finally {
       setLoading(false);
     }
@@ -167,11 +231,12 @@ const ForgotPasswordPage: React.FC = () => {
                   appearance="secondary"
                   onClick={() => setStep(1)}
                   style={{ flex: 1 }}
+                  disabled={loading}
                 >
                   上一步
                 </Button>
-                <Button type="submit" appearance="primary" style={{ flex: 1 }}>
-                  下一步
+                <Button type="submit" appearance="primary" style={{ flex: 1 }} disabled={loading}>
+                  {loading ? <Spinner size="tiny" /> : '验证密保答案'}
                 </Button>
               </div>
             </form>
@@ -206,6 +271,14 @@ const ForgotPasswordPage: React.FC = () => {
                 placeholder="新的密保问题"
                 value={newSecurityQuestion}
                 onChange={(e) => setNewSecurityQuestion(e.target.value)}
+                required
+              />
+
+              <Input
+                type="text"
+                placeholder="新的密保答案"
+                value={newSecurityAnswer}
+                onChange={(e) => setNewSecurityAnswer(e.target.value)}
                 required
               />
 

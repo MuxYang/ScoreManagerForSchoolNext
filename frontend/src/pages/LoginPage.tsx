@@ -11,6 +11,7 @@ import {
   tokens,
 } from '@fluentui/react-components';
 import { useAuth } from '../contexts/AuthContext';
+import { validateUsername, validatePassword, sanitizeInput } from '../utils/inputValidation';
 
 const useStyles = makeStyles({
   container: {
@@ -53,8 +54,27 @@ const LoginPage: React.FC = () => {
     setError('');
     setLoading(true);
 
+    // 输入验证
+    const usernameValidation = validateUsername(username);
+    if (!usernameValidation.valid) {
+      setError(usernameValidation.error || '用户名格式不正确');
+      setLoading(false);
+      return;
+    }
+
+    const passwordValidation = validatePassword(password);
+    if (!passwordValidation.valid) {
+      setError(passwordValidation.error || '密码格式不正确');
+      setLoading(false);
+      return;
+    }
+
     try {
-      await login(username, password);
+      // 清理输入
+      const cleanUsername = sanitizeInput(username);
+      const cleanPassword = sanitizeInput(password);
+      
+      await login(cleanUsername, cleanPassword);
       navigate('/');
     } catch (err: any) {
       setError(err.response?.data?.error || '登录失败，请检查用户名和密码');

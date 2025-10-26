@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+// import { useNavigate } from 'react-router-dom';
 import {
   Button,
   DataGrid,
@@ -67,7 +67,7 @@ interface Student {
 
 const StudentsPage: React.FC = () => {
   const styles = useStyles();
-  const navigate = useNavigate();
+  // const navigate = useNavigate();
   const [students, setStudents] = useState<Student[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -204,8 +204,8 @@ const StudentsPage: React.FC = () => {
     
     // 如果指定了日期范围，根据创建时间筛选（这里简化处理，实际应该在API中实现）
     if (exportStartDate || exportEndDate) {
-      const start = exportStartDate ? new Date(exportStartDate) : new Date(0);
-      const end = exportEndDate ? new Date(exportEndDate) : new Date();
+      // const start = exportStartDate ? new Date(exportStartDate) : new Date(0);
+      // const end = exportEndDate ? new Date(exportEndDate) : new Date();
       
       // 注意：这里假设students有created_at字段，如果没有则导出全部
       // exportStudents = exportStudents.filter(s => {

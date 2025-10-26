@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+// import { useNavigate } from 'react-router-dom';
 import {
   Input,
   Button,
@@ -11,7 +11,7 @@ import {
   tokens,
   Link,
 } from '@fluentui/react-components';
-import { authAPI } from '../services/api';
+// import { authAPI } from '../services/api';
 
 const useStyles = makeStyles({
   container: {
@@ -42,7 +42,7 @@ const useStyles = makeStyles({
 
 const RegisterPage: React.FC = () => {
   const styles = useStyles();
-  const navigate = useNavigate();
+  // const navigate = useNavigate();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -70,9 +70,8 @@ const RegisterPage: React.FC = () => {
     setLoading(true);
 
     try {
-      await authAPI.register(username, password, securityQuestion, securityAnswer);
-      setSuccess('注册成功！3秒后跳转到登录页面...');
-      setTimeout(() => navigate('/login'), 3000);
+      // 注册功能已禁用 - 系统只允许单个管理员账户
+      setError('注册功能已禁用！系统只允许单个管理员账户。');
     } catch (err: any) {
       setError(err.response?.data?.error || '注册失败');
     } finally {

@@ -2,7 +2,6 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import dotenv from 'dotenv';
-import rateLimit from 'express-rate-limit';
 import cookieParser from 'cookie-parser';
 import { ensureEnvFile } from './utils/envGenerator';
 
@@ -27,6 +26,7 @@ import scoreRoutes from './routes/scores';
 import backupRoutes from './routes/backup';
 import importExportRoutes from './routes/import-export';
 import userConfigRoutes from './routes/userConfig';
+import lectureRecordsRoutes from './routes/lectureRecords';
 
 const app = express();
 const PORT = parseInt(process.env.PORT || '3000', 10);
@@ -128,25 +128,7 @@ app.use(cors({
 // Cookie parser middleware
 app.use(cookieParser());
 
-// Global API rate limit (lenient, prevents large-scale attacks)
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 150, // Max 150 requests per IP (increased to 150, separate login limit exists)
-  message: 'Too many requests, please try again later',
-  standardHeaders: true, // Return RateLimit-* headers
-  legacyHeaders: false,
-  handler: (req, res) => {
-    logger.warn('Global rate limit triggered', { 
-      ip: normalizeIp(req),
-      path: req.path,
-      userAgent: req.headers['user-agent']
-    });
-    res.status(429).json({ 
-      error: 'Too many requests, please try again later' 
-    });
-  }
-});
-app.use(limiter);
+// Note: No global rate limiting - only specific endpoints (like login) are rate-limited
 
 // Body parsing
 app.use(express.json({ limit: '10mb' }));
@@ -174,6 +156,7 @@ app.use('/api/scores', scoreRoutes);
 app.use('/api/backup', backupRoutes);
 app.use('/api/import-export', importExportRoutes);
 app.use('/api/user-config', userConfigRoutes);
+app.use('/api/lecture-records', lectureRecordsRoutes);
 
 // 404 处理
 app.use(notFoundHandler);

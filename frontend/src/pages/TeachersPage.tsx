@@ -4,6 +4,7 @@ import {
   Input,
   makeStyles,
   Title2,
+  Card,
   Dialog,
   DialogTrigger,
   DialogSurface,

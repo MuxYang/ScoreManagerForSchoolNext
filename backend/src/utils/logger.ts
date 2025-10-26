@@ -5,7 +5,7 @@ import archiver from 'archiver';
 
 // Log directory at root
 const LOG_DIR = process.env.LOG_DIR || path.join(__dirname, '../../../logs');
-const LOG_LEVEL = process.env.LOG_LEVEL || 'debug'; // Increased default log level to debug
+const LOG_LEVEL = process.env.LOG_LEVEL || 'info'; // Default log level: info (excludes debug)
 
 // Ensure log directory exists
 if (!fs.existsSync(LOG_DIR)) {
@@ -176,7 +176,7 @@ const logger = winston.createLogger({
     new winston.transports.File({
       filename: SESSION_LOG_FILE,
       format: detailedLogFormat,
-      level: 'debug', // Record all levels
+      level: 'info', // Exclude debug level
     }),
     // Current session's error log file (detailed format)
     new winston.transports.File({

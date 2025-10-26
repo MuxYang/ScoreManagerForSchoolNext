@@ -97,7 +97,7 @@ const PendingRecordsPage: React.FC = () => {
   const [selectedRecords, setSelectedRecords] = useState<Set<number>>(new Set());
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [, setLoading] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editingRecord, setEditingRecord] = useState<PendingRecord | null>(null);
   const [editForm, setEditForm] = useState({

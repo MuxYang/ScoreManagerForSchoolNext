@@ -1,6 +1,6 @@
 {
   "name": "score-manager-workspace",
-  "version": "1.0.0",
+  "version": "1.1.1",
   "description": "学生量化管理系统工作区",
   "private": true,
   "scripts": {

@@ -3,7 +3,6 @@ import {
   Card,
   Title1,
   Title2,
-  Title3,
   Body1,
   makeStyles,
   tokens,
@@ -107,8 +106,13 @@ const HomePage: React.FC = () => {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const hasFetched = React.useRef(false);
 
   useEffect(() => {
+    // Prevent duplicate calls in React StrictMode (development only)
+    if (hasFetched.current) return;
+    hasFetched.current = true;
+    
     loadStats();
   }, []);
 

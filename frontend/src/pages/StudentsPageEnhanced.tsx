@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Button,
   Input,
@@ -17,8 +17,6 @@ import {
   Field,
   tokens,
   Subtitle1,
-  Select,
-  Checkbox,
 } from '@fluentui/react-components';
 import { 
   Add20Regular, 
@@ -26,10 +24,6 @@ import {
   Edit20Regular, 
   Info20Regular,
   ArrowImport20Regular,
-  ArrowUp20Regular,
-  ArrowDown20Regular,
-  ChevronLeft20Regular,
-  ChevronRight20Regular,
 } from '@fluentui/react-icons';
 import { studentAPI, scoreAPI } from '../services/api';
 import { useNavigate } from 'react-router-dom';
