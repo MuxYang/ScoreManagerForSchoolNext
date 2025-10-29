@@ -1,7 +1,6 @@
 import React from 'react';
 import {
   Card,
-  Title1,
   Title2,
   Body1,
   Link,
@@ -15,6 +14,7 @@ import {
   ShieldCheckmarkRegular,
   DocumentRegular,
 } from '@fluentui/react-icons';
+import PageTitle from '../components/PageTitle';
 
 const useStyles = makeStyles({
   container: {
@@ -78,9 +78,7 @@ const AboutPage: React.FC = () => {
 
   return (
     <div className={styles.container}>
-      <Title1 style={{ marginBottom: '32px', textAlign: 'center' }}>
-        关于 · 学生量化统计系统
-      </Title1>
+      <PageTitle title="关于系统" subtitle="学生量化统计系统" />
 
       {/* 作者信息 */}
       <div className={styles.section}>

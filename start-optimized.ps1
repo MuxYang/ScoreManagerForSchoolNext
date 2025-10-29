@@ -176,10 +176,10 @@ if ($compressedLogs.Count -gt 0) {
     Write-Host "OK No previous logs to compress" -ForegroundColor Green
 }
 
-# 检查并释放 3000 和 5173 端口
-Write-Host "[3.5/7] Checking and releasing ports 3000, 5173..." -ForegroundColor Yellow
+# 检查并释放 3000 和 4173 端口
+Write-Host "[3.5/7] Checking and releasing ports 3000, 4173..." -ForegroundColor Yellow
 Stop-ProcessByPort -Port 3000
-Stop-ProcessByPort -Port 5173
+Stop-ProcessByPort -Port 4173
 Start-Sleep -Seconds 1
 Write-Host "OK Ports checked and released if needed" -ForegroundColor Green
 
@@ -217,14 +217,13 @@ Write-Host ""
 Write-Host "[5/7] Starting frontend service..." -ForegroundColor Yellow
 
 $frontendPath = Join-Path $PSScriptRoot "frontend"
-$distPath = Join-Path $frontendPath "dist"
 $frontendLog = Join-Path $PSScriptRoot "logs\frontend.log"
 
 # Clear old frontend log
 "" | Out-File $frontendLog -Encoding UTF8
 
-# Use http-server for static file serving with SPA support (HTTP only)
-$frontendProcess = Start-Process -FilePath "powershell" -ArgumentList "-NoProfile", "-Command", "cd '$distPath'; npx --yes http-server . -p 5173 --gzip -c-1 -d false > '$frontendLog' 2>&1" -PassThru -WindowStyle Hidden
+# Use vite preview for frontend serving (port 4173)
+$frontendProcess = Start-Process -FilePath "powershell" -ArgumentList "-NoProfile", "-Command", "cd '$frontendPath'; npm run preview > '$frontendLog' 2>&1" -PassThru -WindowStyle Hidden
 
 Start-Sleep -Seconds 6
 
@@ -265,7 +264,7 @@ try {
 
 # Check frontend availability
 try {
-    $frontendResponse = Invoke-WebRequest -Uri "http://localhost:5173" -TimeoutSec 5 -ErrorAction Stop
+    $frontendResponse = Invoke-WebRequest -Uri "http://localhost:4173" -TimeoutSec 5 -ErrorAction Stop
     if ($frontendResponse.StatusCode -eq 200) {
         Write-Host "OK Frontend service is accessible" -ForegroundColor Green
     } else {
@@ -285,7 +284,7 @@ Write-Host "   🚀 Production System Ready! 🚀" -ForegroundColor Green
 Write-Host "========================================" -ForegroundColor Green
 Write-Host ""
 Write-Host "🌐 Local Access: " -NoNewline -ForegroundColor Cyan
-Write-Host "http://localhost:5173" -ForegroundColor White -BackgroundColor DarkBlue
+Write-Host "http://localhost:4173" -ForegroundColor White -BackgroundColor DarkBlue
 Write-Host ""
 
 # Get local IP address for LAN access
@@ -293,7 +292,7 @@ $localIP = (Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.PrefixOrigi
 
 if ($localIP) {
     Write-Host "🏠 LAN Access: " -NoNewline -ForegroundColor Cyan
-    Write-Host "http://${localIP}:5173" -ForegroundColor White -BackgroundColor DarkMagenta
+    Write-Host "http://${localIP}:4173" -ForegroundColor White -BackgroundColor DarkMagenta
     Write-Host ""
 }
 
@@ -330,7 +329,7 @@ if ($isFirstRun) {
     Write-Host ""
     Start-Sleep -Seconds 5
     # 自动打开前端页面
-    $frontendUrl = "http://localhost:5173"
+    $frontendUrl = "http://localhost:4173"
     Write-Host "Opening browser: $frontendUrl" -ForegroundColor Cyan
     Start-Process $frontendUrl
 }
@@ -472,7 +471,7 @@ try {
     Start-Sleep -Seconds 1
 
     Stop-ProcessByPort -Port 3000
-    Stop-ProcessByPort -Port 5173
+    Stop-ProcessByPort -Port 4173
     
     Write-Host "OK All services stopped" -ForegroundColor Green
     Write-Host ""

@@ -59,6 +59,73 @@ router.get('/', async (req: Request, res: Response) => {
   }
 });
 
+// Get lecture statistics (teacher observation counts) - MUST be before /:id route
+router.get('/statistics', async (req: Request, res: Response) => {
+  try {
+    // Observer teacher statistics (听课教师统计)
+    const observerStats = db.prepare(`
+      SELECT 
+        observer_teacher_name,
+        COUNT(*) as lecture_count,
+        MIN(date) as first_lecture_date,
+        MAX(date) as last_lecture_date
+      FROM teaching_observations
+      GROUP BY observer_teacher_name
+      ORDER BY lecture_count DESC
+    `).all();
+
+    // Teaching teacher statistics (授课教师统计)
+    const teachingStats = db.prepare(`
+      SELECT 
+        teaching_teacher_name,
+        COUNT(*) as lecture_count,
+        COUNT(DISTINCT observer_teacher_name) as observer_count,
+        MIN(date) as first_lecture_date,
+        MAX(date) as last_lecture_date
+      FROM teaching_observations
+      GROUP BY teaching_teacher_name
+      ORDER BY lecture_count DESC
+    `).all();
+
+    // Class statistics (班级统计)
+    const classStats = db.prepare(`
+      SELECT 
+        class,
+        COUNT(*) as lecture_count,
+        COUNT(DISTINCT observer_teacher_name) as observer_count,
+        MIN(date) as first_lecture_date,
+        MAX(date) as last_lecture_date
+      FROM teaching_observations
+      GROUP BY class
+      ORDER BY lecture_count DESC
+    `).all();
+
+    // Overall statistics
+    const overall = db.prepare(`
+      SELECT 
+        COUNT(*) as total_records,
+        COUNT(DISTINCT observer_teacher_name) as total_observers,
+        COUNT(DISTINCT teaching_teacher_name) as total_teachers,
+        COUNT(DISTINCT class) as total_classes,
+        MIN(date) as earliest_date,
+        MAX(date) as latest_date
+      FROM teaching_observations
+    `).get();
+
+    logger.info('Lecture statistics fetched successfully');
+
+    res.json({
+      observerStats,
+      teachingStats,
+      classStats,
+      overall
+    });
+  } catch (error: any) {
+    logger.error('Failed to fetch lecture statistics:', error);
+    res.status(500).json({ error: 'Failed to fetch lecture statistics' });
+  }
+});
+
 // Get a single lecture record by ID
 router.get('/:id', async (req: Request, res: Response) => {
   try {
@@ -323,73 +390,6 @@ router.post('/export', async (req: Request, res: Response) => {
   } catch (error: any) {
     logger.error('Failed to export lecture records:', error);
     res.status(500).json({ error: 'Failed to export lecture records' });
-  }
-});
-
-// Get lecture statistics (teacher observation counts)
-router.get('/statistics', async (req: Request, res: Response) => {
-  try {
-    // Observer teacher statistics (听课教师统计)
-    const observerStats = db.prepare(`
-      SELECT 
-        observer_teacher_name,
-        COUNT(*) as lecture_count,
-        MIN(date) as first_lecture_date,
-        MAX(date) as last_lecture_date
-      FROM teaching_observations
-      GROUP BY observer_teacher_name
-      ORDER BY lecture_count DESC
-    `).all();
-
-    // Teaching teacher statistics (授课教师统计)
-    const teachingStats = db.prepare(`
-      SELECT 
-        teaching_teacher_name,
-        COUNT(*) as lecture_count,
-        COUNT(DISTINCT observer_teacher_name) as observer_count,
-        MIN(date) as first_lecture_date,
-        MAX(date) as last_lecture_date
-      FROM teaching_observations
-      GROUP BY teaching_teacher_name
-      ORDER BY lecture_count DESC
-    `).all();
-
-    // Class statistics (班级统计)
-    const classStats = db.prepare(`
-      SELECT 
-        class,
-        COUNT(*) as lecture_count,
-        COUNT(DISTINCT observer_teacher_name) as observer_count,
-        MIN(date) as first_lecture_date,
-        MAX(date) as last_lecture_date
-      FROM teaching_observations
-      GROUP BY class
-      ORDER BY lecture_count DESC
-    `).all();
-
-    // Overall statistics
-    const overall = db.prepare(`
-      SELECT 
-        COUNT(*) as total_records,
-        COUNT(DISTINCT observer_teacher_name) as total_observers,
-        COUNT(DISTINCT teaching_teacher_name) as total_teachers,
-        COUNT(DISTINCT class) as total_classes,
-        MIN(date) as earliest_date,
-        MAX(date) as latest_date
-      FROM teaching_observations
-    `).get();
-
-    logger.info('Lecture statistics fetched successfully');
-
-    res.json({
-      observerStats,
-      teachingStats,
-      classStats,
-      overall
-    });
-  } catch (error: any) {
-    logger.error('Failed to fetch lecture statistics:', error);
-    res.status(500).json({ error: 'Failed to fetch lecture statistics' });
   }
 });
 

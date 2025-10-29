@@ -28,6 +28,7 @@ import {
   Card,
   Title2,
   Title3,
+  Body1,
   Textarea,
   Combobox,
   Option,
@@ -35,36 +36,65 @@ import {
 } from '@fluentui/react-components';
 import { Add20Regular, Delete20Regular, Edit20Regular, Search20Regular, CloudArrowUp20Regular, ArrowDownload20Regular, ArrowUpload20Regular } from '@fluentui/react-icons';
 import { scoreAPI, studentAPI, importExportAPI, userConfigAPI } from '../services/api';
+import { useMobileDetection } from '../utils/mobileDetection';
+import PageTitle from '../components/PageTitle';
 
 const useStyles = makeStyles({
   container: {
     padding: '20px',
+    '@media (max-width: 768px)': {
+      padding: '12px 8px',
+    },
   },
   header: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: '20px',
+    '@media (max-width: 768px)': {
+      flexDirection: 'column',
+      gap: '12px',
+      alignItems: 'stretch',
+      marginBottom: '16px',
+    },
   },
   headerButtons: {
     display: 'flex',
     gap: '8px',
+    '@media (max-width: 768px)': {
+      flexDirection: 'column',
+      gap: '6px',
+    },
   },
   form: {
     display: 'flex',
     flexDirection: 'column',
     gap: '16px',
     minWidth: '400px',
+    '@media (max-width: 768px)': {
+      minWidth: 'unset',
+      width: '100%',
+      gap: '12px',
+    },
   },
   actions: {
     display: 'flex',
     gap: '8px',
+    '@media (max-width: 768px)': {
+      flexDirection: 'column',
+      gap: '6px',
+    },
   },
   filters: {
     display: 'flex',
     gap: '16px',
     marginBottom: '20px',
     flexWrap: 'wrap',
+    '@media (max-width: 768px)': {
+      flexDirection: 'column',
+      gap: '12px',
+      marginBottom: '16px',
+    },
   },
   filterItem: {
     display: 'flex',
@@ -83,6 +113,11 @@ const useStyles = makeStyles({
   },
   aiImportDialog: {
     minWidth: '700px',
+    '@media (max-width: 768px)': {
+      minWidth: '95vw',
+      maxWidth: '95vw',
+      margin: '10px',
+    },
   },
   textArea: {
     minHeight: '200px',
@@ -94,8 +129,80 @@ const useStyles = makeStyles({
   },
   matchInfo: {
     fontSize: '12px',
-    color: '#666',
+    color: tokens.colorNeutralForeground2,
     marginTop: '4px',
+  },
+  aiErrorDialog: {
+    '@media (max-width: 768px)': {
+      minWidth: '95vw',
+      maxWidth: '95vw',
+      margin: '10px',
+      minHeight: '80vh',
+    },
+    '@media (min-width: 769px)': {
+      maxWidth: '900px',
+      minHeight: '600px',
+    },
+  },
+  aiErrorContent: {
+    '@media (max-width: 768px)': {
+      padding: '12px',
+      gap: '12px',
+    },
+  },
+  aiErrorTextarea: {
+    '@media (max-width: 768px)': {
+      minHeight: '200px',
+      fontSize: '12px',
+    },
+    '@media (min-width: 769px)': {
+      minHeight: '400px',
+      fontSize: '13px',
+    },
+  },
+  aiErrorActions: {
+    '@media (max-width: 768px)': {
+      flexDirection: 'column',
+      gap: '8px',
+      padding: '12px',
+    },
+    '@media (min-width: 769px)': {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      paddingTop: '16px',
+      borderTop: '1px solid #e0e0e0',
+    },
+  },
+  aiConfigDialog: {
+    '@media (max-width: 768px)': {
+      minWidth: '95vw',
+      maxWidth: '95vw',
+      margin: '10px',
+      maxHeight: '90vh',
+    },
+    '@media (min-width: 769px)': {
+      minWidth: '600px',
+      maxWidth: '800px',
+    },
+  },
+  aiConfigContent: {
+    '@media (max-width: 768px)': {
+      padding: '12px',
+      gap: '16px',
+    },
+    '@media (min-width: 769px)': {
+      gap: '20px',
+    },
+  },
+  aiConfigActions: {
+    '@media (max-width: 768px)': {
+      flexDirection: 'column',
+      gap: '8px',
+    },
+    '@media (min-width: 769px)': {
+      flexDirection: 'row',
+      gap: '12px',
+    },
   },
 });
 
@@ -140,6 +247,7 @@ interface ParsedScoreData {
 
 const ScoresPageEnhanced: React.FC = () => {
   const styles = useStyles();
+  const isMobile = useMobileDetection();
   const [selectedTab, setSelectedTab] = useState('entry');
   const [scores, setScores] = useState<Score[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
@@ -171,6 +279,7 @@ const ScoresPageEnhanced: React.FC = () => {
   const [aiErrorDialogOpen, setAiErrorDialogOpen] = useState(false);
   const [aiErrorText, setAiErrorText] = useState('');
   const [aiErrorMessage, setAiErrorMessage] = useState('');
+  const [aiErrorType, setAiErrorType] = useState<'parse' | 'config' | 'import' | 'general'>('general');
   
   // AI导入总结弹窗
   const [importSummaryOpen, setImportSummaryOpen] = useState(false);
@@ -183,6 +292,11 @@ const ScoresPageEnhanced: React.FC = () => {
     lectureSuccess: 0,
     lectureFailed: 0
   });
+  
+  // 重复记录检测和确认
+  const [duplicateCheckOpen, setDuplicateCheckOpen] = useState(false);
+  const [duplicateRecords, setDuplicateRecords] = useState<any[]>([]);
+  const [, setPendingImportRecords] = useState<any[]>([]);
 
   // 表格导入相关状态
   const [excelImportOpen, setExcelImportOpen] = useState(false);
@@ -362,12 +476,12 @@ const ScoresPageEnhanced: React.FC = () => {
   // AI 解析文本 - 符合 OpenAI 规范的流式调用
   const handleAiParse = async () => {
     if (!aiText.trim()) {
-      setError('请输入要解析的文本');
+      showAiError('请输入要解析的文本', 'general');
       return;
     }
 
     if (!aiApiKey.trim()) {
-      setError('请先配置 AI API Key');
+      showAiError('请先配置 AI API Key', 'config');
       setAiConfigOpen(true);
       return;
     }
@@ -630,6 +744,14 @@ const ScoresPageEnhanced: React.FC = () => {
     }
   };
 
+  // 显示AI错误弹窗的通用函数
+  const showAiError = (message: string, type: 'parse' | 'config' | 'import' | 'general' = 'general', text?: string) => {
+    setAiErrorMessage(message);
+    setAiErrorType(type);
+    setAiErrorText(text || '');
+    setAiErrorDialogOpen(true);
+  };
+
   // 保存AI配置（同时保存到localStorage和后端cookie）
   const handleSaveAiConfig = async () => {
     // 1. 本地存一份到localStorage（作为备份）
@@ -662,7 +784,7 @@ const ScoresPageEnhanced: React.FC = () => {
   // 获取可用模型列表
   const handleFetchModels = async () => {
     if (!aiApiUrl || !aiApiKey) {
-      setError('请先填写 API 地址和 API Key');
+      showAiError('请先填写 API 地址和 API Key', 'config');
       return;
     }
 
@@ -716,7 +838,7 @@ const ScoresPageEnhanced: React.FC = () => {
         throw new Error('返回的数据格式不正确');
       }
     } catch (err: any) {
-      setError(err.message || '获取模型列表失败，请检查 API 配置');
+      showAiError(err.message || '获取模型列表失败，请检查 API 配置', 'config');
       // 如果获取失败，使用默认模型列表
       setAvailableModels([
         'gpt-4o',
@@ -928,7 +1050,7 @@ const ScoresPageEnhanced: React.FC = () => {
   // 处理教师记录
   const handleProcessTeacherRecords = async (action: 'teacher' | 'student' | 'discard') => {
     if (selectedTeacherRecords.size === 0) {
-      setError('请选择要处理的记录');
+      showAiError('请选择要处理的记录', 'general');
       return;
     }
 
@@ -955,7 +1077,7 @@ const ScoresPageEnhanced: React.FC = () => {
     // 使用用户修改后的文本重新尝试解析
     const textToRetry = aiErrorText.trim();
     if (!textToRetry) {
-      setError('修改后的文本不能为空');
+      showAiError('修改后的文本不能为空', 'parse', textToRetry);
       return;
     }
 
@@ -972,8 +1094,7 @@ const ScoresPageEnhanced: React.FC = () => {
         if (jsonMatch) {
           jsonData = JSON.parse(jsonMatch[0]);
         } else {
-          setError('无法解析修改后的JSON数据，请确保格式正确');
-          setAiErrorDialogOpen(true);
+          showAiError('无法解析修改后的JSON数据，请确保格式正确', 'parse', textToRetry);
           return;
         }
       }
@@ -1010,8 +1131,7 @@ const ScoresPageEnhanced: React.FC = () => {
       setSuccess(`成功解析 ${parsed.length} 条数据`);
     } catch (err: any) {
       console.error('重新解析失败:', err);
-      setError('解析失败：' + (err.message || '请检查JSON格式是否正确'));
-      setAiErrorDialogOpen(true);
+      showAiError('解析失败：' + (err.message || '请检查JSON格式是否正确'), 'parse', textToRetry);
     }
   };
 
@@ -1024,16 +1144,64 @@ const ScoresPageEnhanced: React.FC = () => {
     setTimeout(() => setError(''), 3000);
   };
 
+  // 检查重复记录
+  const checkForDuplicates = async (records: any[]) => {
+    try {
+      const response = await scoreAPI.checkDuplicates(records);
+      return response.data;
+    } catch (err: any) {
+      console.error('检查重复记录失败:', err);
+      return { hasDuplicates: false, duplicates: [] };
+    }
+  };
+
   // 批量导入AI解析的数据（支持学生和教师记录）
   const handleAiBatchImport = async () => {
     if (parsedData.length === 0 && parsedLectureRecords.length === 0) {
-      setError('没有可导入的数据');
+      showAiError('没有可导入的数据', 'import');
       return;
     }
 
     setAiImporting(true);
     setError('');
 
+    try {
+      // 1. 检查学生量化记录的重复
+      if (parsedData.length > 0) {
+        const records = parsedData.map(item => ({
+          name: item.studentName,
+          className: item.class,
+          teacherName: item.teacherName,
+          subject: item.subject || '',
+          others: item.others || '',
+          points: item.points,
+          reason: item.reason,
+          date: new Date().toISOString().split('T')[0],
+        }));
+
+        const duplicateCheck = await checkForDuplicates(records);
+        
+        if (duplicateCheck.hasDuplicates) {
+          // 发现重复记录，显示确认对话框
+          setDuplicateRecords(duplicateCheck.duplicates);
+          setPendingImportRecords(records);
+          setDuplicateCheckOpen(true);
+          setAiImporting(false);
+          return;
+        }
+      }
+
+      // 2. 没有重复记录，直接导入
+      await performActualImport();
+      
+    } catch (err: any) {
+      showAiError(err.response?.data?.error || 'AI导入失败', 'import');
+      setAiImporting(false);
+    }
+  };
+
+  // 执行实际的导入操作
+  const performActualImport = async () => {
     const summary = {
       studentTotal: parsedData.length,
       studentSuccess: 0,
@@ -1087,10 +1255,25 @@ const ScoresPageEnhanced: React.FC = () => {
       setAiStreamingText('');
       loadScores();
     } catch (err: any) {
-      setError(err.response?.data?.error || 'AI导入失败');
+      showAiError(err.response?.data?.error || 'AI导入失败', 'import');
     } finally {
       setAiImporting(false);
     }
+  };
+
+  // 确认导入重复记录
+  const handleConfirmDuplicateImport = async () => {
+    setDuplicateCheckOpen(false);
+    setAiImporting(true);
+    await performActualImport();
+  };
+
+  // 取消导入重复记录
+  const handleCancelDuplicateImport = () => {
+    setDuplicateCheckOpen(false);
+    setDuplicateRecords([]);
+    setPendingImportRecords([]);
+    setAiImporting(false);
   };
 
   // 导出量化数据
@@ -1304,7 +1487,7 @@ const ScoresPageEnhanced: React.FC = () => {
   return (
     <div className={styles.container}>
       <div className={styles.header}>
-        <Title2>量化管理</Title2>
+        <PageTitle title="量化管理" subtitle="管理学生和教师的积分记录" />
         <div className={styles.headerButtons}>
           <Button
             appearance="subtle"
@@ -1498,9 +1681,9 @@ const ScoresPageEnhanced: React.FC = () => {
               <div style={{ 
                 marginTop: '8px', 
                 padding: '8px 12px', 
-                backgroundColor: '#f0f9ff', 
+                backgroundColor: tokens.colorBrandBackground2, 
                 borderRadius: '4px',
-                border: '1px solid #0078d4',
+                border: `1px solid ${tokens.colorBrandStroke1}`,
                 fontSize: '14px'
               }}>
                 ✓ 已选择: {statsMatchedStudent.name} ({statsMatchedStudent.student_id}) - {statsMatchedStudent.class}
@@ -1534,13 +1717,13 @@ const ScoresPageEnhanced: React.FC = () => {
           )}
 
           {!statistics && selectedStudentForStats && (
-            <div style={{ textAlign: 'center', padding: '40px', color: '#666' }}>
+            <div style={{ textAlign: 'center', padding: '40px', color: tokens.colorNeutralForeground2 }}>
               该学生暂无量化记录
             </div>
           )}
 
           {!selectedStudentForStats && (
-            <div style={{ textAlign: 'center', padding: '40px', color: '#666' }}>
+            <div style={{ textAlign: 'center', padding: '40px', color: tokens.colorNeutralForeground2 }}>
               请选择学生查看统计数据
             </div>
           )}
@@ -1578,7 +1761,7 @@ const ScoresPageEnhanced: React.FC = () => {
                     </div>
                   )}
                   {studentInput && !matchedStudent && studentSuggestions.length === 0 && (
-                    <div className={styles.matchInfo} style={{ color: '#d13438' }}>
+                    <div className={styles.matchInfo} style={{ color: tokens.colorPaletteRedForeground1 }}>
                       ✗ 未找到匹配的学生
                     </div>
                   )}
@@ -1657,7 +1840,7 @@ const ScoresPageEnhanced: React.FC = () => {
           }
         }}
       >
-        <DialogSurface style={{ maxWidth: '1200px', minHeight: '700px', width: '90vw' }}>
+        <DialogSurface className={styles.aiImportDialog} style={{ maxWidth: '1200px', minHeight: '700px', width: '90vw' }}>
           <DialogBody>
             <DialogTitle>AI 智能批量导入</DialogTitle>
             <DialogContent style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
@@ -1794,9 +1977,9 @@ const ScoresPageEnhanced: React.FC = () => {
                             </td>
                             <td style={{ padding: '8px', textAlign: 'center' }}>
                               {item.matchedStudent ? (
-                                <span style={{ color: '#107c10', fontSize: '12px' }}>✓ 已匹配</span>
+                                <span style={{ color: tokens.colorPaletteGreenForeground1, fontSize: '12px' }}>✓ 已匹配</span>
                               ) : (
-                                <span style={{ color: '#d13438', fontSize: '12px' }}>✗ 未匹配</span>
+                                <span style={{ color: tokens.colorPaletteRedForeground1, fontSize: '12px' }}>✗ 未匹配</span>
                               )}
                             </td>
                             <td style={{ padding: '8px', textAlign: 'center' }}>
@@ -1923,62 +2106,113 @@ const ScoresPageEnhanced: React.FC = () => {
 
       {/* AI 错误处理对话框 */}
       <Dialog open={aiErrorDialogOpen} onOpenChange={(_, data) => setAiErrorDialogOpen(data.open)}>
-        <DialogSurface style={{ maxWidth: '900px', minHeight: '600px' }}>
+        <DialogSurface className={styles.aiErrorDialog}>
           <DialogBody>
-            <DialogTitle>AI 解析错误 - 请手动修改</DialogTitle>
-            <DialogContent style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <DialogTitle>
+              {aiErrorType === 'parse' && '🤖 AI 解析错误'}
+              {aiErrorType === 'config' && '⚙️ AI 配置错误'}
+              {aiErrorType === 'import' && '📥 AI 导入错误'}
+              {aiErrorType === 'general' && '❌ AI 操作错误'}
+            </DialogTitle>
+            <DialogContent className={styles.aiErrorContent} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <MessageBar intent="error">
                 <MessageBarBody>
                   <strong>错误信息：</strong>{aiErrorMessage}
                 </MessageBarBody>
               </MessageBar>
               
-              <div>
-                <Label weight="semibold">AI 返回的文本（可修改）：</Label>
-                <Textarea
-                  resize="vertical"
-                  textarea={{ 
-                    style: { 
-                      minHeight: '400px',
-                      fontSize: '13px',
-                      fontFamily: 'monospace'
-                    }
-                  }}
-                  style={{ 
-                    marginTop: '8px',
-                    width: '100%'
-                  }}
-                  value={aiErrorText}
-                  onChange={(e) => setAiErrorText(e.target.value)}
-                  placeholder="修改 AI 返回的文本，确保为有效的 JSON 格式"
-                />
-              </div>
+              {aiErrorType === 'parse' && aiErrorText && (
+                <div>
+                  <Label weight="semibold">AI 返回的文本（可修改）：</Label>
+                  <Textarea
+                    resize="vertical"
+                    className={styles.aiErrorTextarea}
+                    textarea={{ 
+                      style: { 
+                        fontFamily: 'monospace',
+                        minHeight: window.innerWidth <= 768 ? '200px' : '400px',
+                        fontSize: window.innerWidth <= 768 ? '12px' : '13px'
+                      }
+                    }}
+                    style={{ 
+                      marginTop: '8px',
+                      width: '100%'
+                    }}
+                    value={aiErrorText}
+                    onChange={(e) => setAiErrorText(e.target.value)}
+                    placeholder="修改 AI 返回的文本，确保为有效的 JSON 格式"
+                  />
+                </div>
+              )}
 
-              <MessageBar intent="info">
-                <MessageBarBody>
-                  💡 提示：请确保文本为有效的 JSON 数组格式，例如：[{"{"}studentName":"张三","class":"高一1班","reason":"迟到","teacherName":"李老师","subject":"数学","others":""{"}"}]
-                </MessageBarBody>
-              </MessageBar>
+              {aiErrorType === 'parse' && (
+                <MessageBar intent="info">
+                  <MessageBarBody>
+                    💡 提示：请确保文本为有效的 JSON 数组格式，例如：[{"{"}studentName":"张三","class":"高一1班","reason":"迟到","teacherName":"李老师","subject":"数学","others":""{"}"}]
+                  </MessageBarBody>
+                </MessageBar>
+              )}
+
+              {aiErrorType === 'config' && (
+                <MessageBar intent="info">
+                  <MessageBarBody>
+                    💡 提示：请点击"AI 配置"按钮重新配置 API 地址和密钥，或检查网络连接。
+                  </MessageBarBody>
+                </MessageBar>
+              )}
+
+              {aiErrorType === 'import' && (
+                <MessageBar intent="info">
+                  <MessageBarBody>
+                    💡 提示：导入失败可能是由于数据格式问题或网络错误，请检查数据格式后重试。
+                  </MessageBarBody>
+                </MessageBar>
+              )}
             </DialogContent>
             
-            <DialogActions style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '16px', borderTop: '1px solid #e0e0e0' }}>
+            <DialogActions className={styles.aiErrorActions} style={{ display: 'flex' }}>
               <Button 
                 appearance="secondary"
                 size="large"
                 onClick={handleAiErrorDiscard}
-                style={{ minWidth: '100px' }}
+                style={{ 
+                  minWidth: isMobile ? '100%' : '100px',
+                  flex: isMobile ? '1' : undefined
+                }}
               >
-                舍弃
+                关闭
               </Button>
               
-              <Button
-                appearance="primary"
-                size="large"
-                onClick={handleAiErrorRetry}
-                style={{ minWidth: '140px' }}
-              >
-                尝试匹配
-              </Button>
+              {aiErrorType === 'parse' && aiErrorText && (
+                <Button
+                  appearance="primary"
+                  size="large"
+                  onClick={handleAiErrorRetry}
+                  style={{ 
+                    minWidth: isMobile ? '100%' : '140px',
+                    flex: isMobile ? '1' : undefined
+                  }}
+                >
+                  尝试重新解析
+                </Button>
+              )}
+
+              {aiErrorType === 'config' && (
+                <Button
+                  appearance="primary"
+                  size="large"
+                  onClick={() => {
+                    setAiErrorDialogOpen(false);
+                    setAiConfigOpen(true);
+                  }}
+                  style={{ 
+                    minWidth: isMobile ? '100%' : '140px',
+                    flex: isMobile ? '1' : undefined
+                  }}
+                >
+                  打开配置
+                </Button>
+              )}
             </DialogActions>
           </DialogBody>
         </DialogSurface>
@@ -1986,11 +2220,11 @@ const ScoresPageEnhanced: React.FC = () => {
 
       {/* AI 配置对话框 */}
       <Dialog open={aiConfigOpen} onOpenChange={(_, data) => setAiConfigOpen(data.open)}>
-        <DialogSurface style={{ minWidth: '600px' }}>
+        <DialogSurface className={styles.aiConfigDialog}>
           <DialogBody>
             <DialogTitle>AI API 配置</DialogTitle>
-            <DialogContent>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+            <DialogContent className={styles.aiConfigContent} style={{ display: 'flex', flexDirection: 'column' }}>
+              <div>
                 <div>
                   <Label required style={{ fontSize: '14px', fontWeight: '600', marginBottom: '8px', display: 'block' }}>
                     API 地址
@@ -2005,7 +2239,7 @@ const ScoresPageEnhanced: React.FC = () => {
                       fontSize: '14px'
                     }}
                   />
-                  <div style={{ fontSize: '12px', color: '#666', marginTop: '6px' }}>
+                  <div style={{ fontSize: '12px', color: tokens.colorNeutralForeground2, marginTop: '6px' }}>
                     OpenAI API 或兼容的服务地址
                   </div>
                 </div>
@@ -2025,7 +2259,7 @@ const ScoresPageEnhanced: React.FC = () => {
                       fontSize: '14px'
                     }}
                   />
-                  <div style={{ fontSize: '12px', color: '#666', marginTop: '6px' }}>
+                  <div style={{ fontSize: '12px', color: tokens.colorNeutralForeground2, marginTop: '6px' }}>
                     您的 API 密钥，将安全保存在本地浏览器
                   </div>
                 </div>
@@ -2079,7 +2313,7 @@ const ScoresPageEnhanced: React.FC = () => {
                         <option value="gpt-4o-mini">GPT-4o Mini</option>
                       </Select>
                     )}
-                    <div style={{ fontSize: '12px', color: '#666', marginTop: '6px' }}>
+                    <div style={{ fontSize: '12px', color: tokens.colorNeutralForeground2, marginTop: '6px' }}>
                       {availableModels.length > 0 
                         ? `已获取 ${availableModels.length} 个可用模型`
                         : '点击"获取模型列表"按钮获取可用模型，或手动选择默认模型'}
@@ -2094,18 +2328,18 @@ const ScoresPageEnhanced: React.FC = () => {
                 </MessageBar>
               </div>
             </DialogContent>
-            <DialogActions>
+            <DialogActions className={styles.aiConfigActions}>
               <Button 
                 appearance="secondary" 
                 onClick={() => setAiConfigOpen(false)}
-                style={{ minWidth: '100px', height: '36px' }}
+                style={{ minWidth: isMobile ? '100%' : '100px', height: '36px' }}
               >
                 取消
               </Button>
               <Button 
                 appearance="primary" 
                 onClick={handleSaveAiConfig}
-                style={{ minWidth: '100px', height: '36px' }}
+                style={{ minWidth: isMobile ? '100%' : '100px', height: '36px' }}
               >
                 保存配置
               </Button>
@@ -2304,7 +2538,7 @@ const ScoresPageEnhanced: React.FC = () => {
                 </table>
               </Card>
 
-              <div style={{ fontSize: '13px', color: '#666' }}>
+              <div style={{ fontSize: '13px', color: tokens.colorNeutralForeground2 }}>
                 已选择 {selectedTeacherRecords.size} 条记录
               </div>
             </DialogContent>
@@ -2343,6 +2577,84 @@ const ScoresPageEnhanced: React.FC = () => {
         </DialogSurface>
       </Dialog>
 
+      {/* 重复记录确认对话框 */}
+      <Dialog 
+        open={duplicateCheckOpen} 
+        onOpenChange={(_, data) => setDuplicateCheckOpen(data.open)}
+      >
+        <DialogSurface style={{ maxWidth: '800px', width: '90vw' }}>
+          <DialogBody>
+            <DialogTitle>⚠️ 发现重复记录</DialogTitle>
+            <DialogContent>
+              <MessageBar intent="warning" style={{ marginBottom: '16px' }}>
+                <MessageBarBody>
+                  检测到 {duplicateRecords.length} 条记录与当天已存在的记录重复（相同学生、相同教师、相同原因）。
+                  是否确认继续导入？
+                </MessageBarBody>
+              </MessageBar>
+              
+              <div style={{ maxHeight: '400px', overflow: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
+                  <thead style={{ position: 'sticky', top: 0, backgroundColor: tokens.colorNeutralBackground1 }}>
+                    <tr style={{ borderBottom: `2px solid ${tokens.colorNeutralStroke1}` }}>
+                      <th style={{ padding: '8px', textAlign: 'left' }}>学生姓名</th>
+                      <th style={{ padding: '8px', textAlign: 'left' }}>班级</th>
+                      <th style={{ padding: '8px', textAlign: 'left' }}>教师</th>
+                      <th style={{ padding: '8px', textAlign: 'left' }}>原因</th>
+                      <th style={{ padding: '8px', textAlign: 'left' }}>积分</th>
+                      <th style={{ padding: '8px', textAlign: 'left' }}>状态</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {duplicateRecords.map((record, index) => (
+                      <tr key={index} style={{ borderBottom: `1px solid ${tokens.colorNeutralStroke2}` }}>
+                        <td style={{ padding: '8px' }}>{record.name}</td>
+                        <td style={{ padding: '8px' }}>{record.className || '-'}</td>
+                        <td style={{ padding: '8px' }}>{record.teacherName || '-'}</td>
+                        <td style={{ padding: '8px' }}>{record.reason}</td>
+                        <td style={{ padding: '8px' }}>{record.points}</td>
+                        <td style={{ padding: '8px' }}>
+                          <span style={{ 
+                            color: tokens.colorPaletteRedForeground1, 
+                            fontSize: '12px',
+                            fontWeight: '500'
+                          }}>
+                            ⚠️ 重复
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              
+              <div style={{ marginTop: '16px', padding: '12px', backgroundColor: tokens.colorNeutralBackground2, borderRadius: '4px' }}>
+                <Body1 style={{ fontSize: '13px', color: tokens.colorNeutralForeground2 }}>
+                  <strong>注意：</strong>继续导入将创建重复记录。建议检查数据后重新导入，或手动编辑现有记录。
+                </Body1>
+              </div>
+            </DialogContent>
+            
+            <DialogActions>
+              <Button 
+                appearance="secondary" 
+                onClick={handleCancelDuplicateImport}
+                style={{ minWidth: '100px' }}
+              >
+                取消导入
+              </Button>
+              <Button 
+                appearance="primary" 
+                onClick={handleConfirmDuplicateImport}
+                style={{ minWidth: '100px' }}
+              >
+                确认导入
+              </Button>
+            </DialogActions>
+          </DialogBody>
+        </DialogSurface>
+      </Dialog>
+
       {/* 导入总结弹窗 */}
       <Dialog open={importSummaryOpen} onOpenChange={(_, data) => setImportSummaryOpen(data.open)}>
         <DialogSurface style={{ maxWidth: '600px' }}>
@@ -2362,19 +2674,19 @@ const ScoresPageEnhanced: React.FC = () => {
                     </div>
                     <div style={{ padding: '12px', backgroundColor: tokens.colorNeutralBackground1, borderRadius: '6px' }}>
                       <Label>成功导入</Label>
-                      <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#107c10' }}>
+                      <div style={{ fontSize: '24px', fontWeight: 'bold', color: tokens.colorPaletteGreenForeground1 }}>
                         {importSummary.studentSuccess}
                       </div>
                     </div>
                     <div style={{ padding: '12px', backgroundColor: tokens.colorNeutralBackground1, borderRadius: '6px' }}>
                       <Label>待处理</Label>
-                      <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#ca5010' }}>
+                      <div style={{ fontSize: '24px', fontWeight: 'bold', color: tokens.colorPaletteDarkOrangeForeground1 }}>
                         {importSummary.studentPending}
                       </div>
                     </div>
                     <div style={{ padding: '12px', backgroundColor: tokens.colorNeutralBackground1, borderRadius: '6px' }}>
                       <Label>失败</Label>
-                      <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#d13438' }}>
+                      <div style={{ fontSize: '24px', fontWeight: 'bold', color: tokens.colorPaletteRedForeground1 }}>
                         {importSummary.studentFailed}
                       </div>
                     </div>
@@ -2395,13 +2707,13 @@ const ScoresPageEnhanced: React.FC = () => {
                     </div>
                     <div style={{ padding: '12px', backgroundColor: tokens.colorNeutralBackground1, borderRadius: '6px' }}>
                       <Label>成功导入</Label>
-                      <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#107c10' }}>
+                      <div style={{ fontSize: '24px', fontWeight: 'bold', color: tokens.colorPaletteGreenForeground1 }}>
                         {importSummary.lectureSuccess}
                       </div>
                     </div>
                     <div style={{ padding: '12px', backgroundColor: tokens.colorNeutralBackground1, borderRadius: '6px' }}>
                       <Label>失败</Label>
-                      <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#d13438' }}>
+                      <div style={{ fontSize: '24px', fontWeight: 'bold', color: tokens.colorPaletteRedForeground1 }}>
                         {importSummary.lectureFailed}
                       </div>
                     </div>

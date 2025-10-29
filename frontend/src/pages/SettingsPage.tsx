@@ -22,9 +22,12 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
+  Checkbox,
+  tokens,
 } from '@fluentui/react-components';
 import { authAPI, backupAPI } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
+import PageTitle from '../components/PageTitle';
 import { useTheme } from '../contexts/ThemeContext';
 
 const useStyles = makeStyles({
@@ -102,6 +105,17 @@ const SettingsPage: React.FC = () => {
   const [loadingStats, setLoadingStats] = useState(false);
   const [optimizing, setOptimizing] = useState(false);
 
+  // 用户管理
+  const [users, setUsers] = useState<any[]>([]);
+  const [loadingUsers, setLoadingUsers] = useState(false);
+  const [createUserDialogOpen, setCreateUserDialogOpen] = useState(false);
+  const [resetPasswordDialogOpen, setResetPasswordDialogOpen] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<any>(null);
+  const [newUsername, setNewUsername] = useState('');
+  const [newUserPassword, setNewUserPassword] = useState('');
+  const [resetPassword, setResetPassword] = useState('');
+  const [mustChangePassword, setMustChangePassword] = useState(true);
+
   // 保存设置到 localStorage（主题除外，主题由 ThemeContext 管理）
   useEffect(() => {
     localStorage.setItem('fontSize', fontSize);
@@ -146,6 +160,111 @@ const SettingsPage: React.FC = () => {
     }
   };
 
+  // 加载用户列表
+  const loadUsers = async () => {
+    if (!user?.isAdmin) return;
+    
+    setLoadingUsers(true);
+    setError('');
+    try {
+      const response = await authAPI.getUsers();
+      setUsers(response.data.users);
+    } catch (err: any) {
+      setError(err.response?.data?.error || '获取用户列表失败');
+    } finally {
+      setLoadingUsers(false);
+    }
+  };
+
+  // 创建用户
+  const handleCreateUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setSuccess('');
+
+    if (!newUsername || !newUserPassword) {
+      setError('用户名和密码是必填的');
+      return;
+    }
+
+    try {
+      await authAPI.createUser(newUsername, newUserPassword, mustChangePassword);
+      setSuccess(`用户 ${newUsername} 创建成功！`);
+      setNewUsername('');
+      setNewUserPassword('');
+      setMustChangePassword(true);
+      setCreateUserDialogOpen(false);
+      loadUsers(); // 重新加载用户列表
+    } catch (err: any) {
+      setError(err.response?.data?.error || '创建用户失败');
+    }
+  };
+
+  // 重置用户密码
+  const handleResetPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedUser || !resetPassword) return;
+    
+    setError('');
+    setSuccess('');
+
+    try {
+      await authAPI.resetUserPassword(selectedUser.id, resetPassword);
+      setSuccess(`用户 ${selectedUser.username} 的密码重置成功！`);
+      setResetPassword('');
+      setResetPasswordDialogOpen(false);
+      setSelectedUser(null);
+    } catch (err: any) {
+      setError(err.response?.data?.error || '重置密码失败');
+    }
+  };
+
+  // 删除用户
+  const handleDeleteUser = async (userId: number, username: string) => {
+    if (!confirm(`确定要删除用户 "${username}" 吗？此操作不可撤销！`)) {
+      return;
+    }
+
+    setError('');
+    setSuccess('');
+
+    try {
+      await authAPI.deleteUser(userId);
+      setSuccess(`用户 ${username} 删除成功！`);
+      loadUsers(); // 重新加载用户列表
+    } catch (err: any) {
+      setError(err.response?.data?.error || '删除用户失败');
+    }
+  };
+
+  // 生成随机密码
+  const generatePassword = async () => {
+    try {
+      const response = await authAPI.generatePassword(12);
+      setNewUserPassword(response.data.password);
+    } catch (err: any) {
+      setError(err.response?.data?.error || '生成密码失败');
+    }
+  };
+
+  // 生成重置密码
+  const generateResetPassword = async () => {
+    try {
+      const response = await authAPI.generatePassword(12);
+      setResetPassword(response.data.password);
+    } catch (err: any) {
+      setError(err.response?.data?.error || '生成密码失败');
+    }
+  };
+
+
+  // 加载用户列表（当选择用户管理tab时）
+  useEffect(() => {
+    if (selectedTab === 'users' && user?.isAdmin) {
+      loadUsers();
+    }
+  }, [selectedTab, user]);
+
   const handlePasswordChange = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
@@ -174,16 +293,17 @@ const SettingsPage: React.FC = () => {
 
   return (
     <div className={styles.container}>
-      <Title2>系统设置</Title2>
+      <PageTitle title="系统设置" subtitle="配置系统参数和用户管理" />
 
       <TabList
         selectedValue={selectedTab}
         onTabSelect={(_, data) => setSelectedTab(data.value as string)}
       >
         <Tab value="password">密码修改</Tab>
+        {user?.isAdmin && <Tab value="users">账号管理</Tab>}
         <Tab value="interface">界面设置</Tab>
         <Tab value="function">功能设置</Tab>
-        <Tab value="database">数据库设置</Tab>
+        {user?.isAdmin && <Tab value="database">数据库设置</Tab>}
         <Tab value="language">语言设置</Tab>
       </TabList>
 
@@ -233,6 +353,7 @@ const SettingsPage: React.FC = () => {
                 修改密码
               </Button>
             </form>
+            
           </div>
         )}
 
@@ -245,7 +366,7 @@ const SettingsPage: React.FC = () => {
               <div className={styles.settingRow}>
                 <div className={styles.settingLabel}>
                   <Label>主题模式</Label>
-                  <div style={{ fontSize: '12px', color: '#666' }}>
+                  <div style={{ fontSize: '12px', color: tokens.colorNeutralForeground2 }}>
                     选择主题外观（即时生效）
                   </div>
                 </div>
@@ -266,7 +387,7 @@ const SettingsPage: React.FC = () => {
               <div className={styles.settingRow}>
                 <div className={styles.settingLabel}>
                   <Label>字体大小</Label>
-                  <div style={{ fontSize: '12px', color: '#666' }}>
+                  <div style={{ fontSize: '12px', color: tokens.colorNeutralForeground2 }}>
                     调整界面文字大小
                   </div>
                 </div>
@@ -300,7 +421,7 @@ const SettingsPage: React.FC = () => {
               <div className={styles.settingRow}>
                 <div className={styles.settingLabel}>
                   <Label>每页显示条数</Label>
-                  <div style={{ fontSize: '12px', color: '#666' }}>
+                  <div style={{ fontSize: '12px', color: tokens.colorNeutralForeground2 }}>
                     设置列表每页显示的数据条数
                   </div>
                 </div>
@@ -324,7 +445,7 @@ const SettingsPage: React.FC = () => {
               <div className={styles.settingRow}>
                 <div className={styles.settingLabel}>
                   <Label>自动备份</Label>
-                  <div style={{ fontSize: '12px', color: '#666' }}>
+                  <div style={{ fontSize: '12px', color: tokens.colorNeutralForeground2 }}>
                     在关键操作前自动创建数据备份
                   </div>
                 </div>
@@ -341,7 +462,7 @@ const SettingsPage: React.FC = () => {
               <div className={styles.settingRow}>
                 <div className={styles.settingLabel}>
                   <Label>显示通知</Label>
-                  <div style={{ fontSize: '12px', color: '#666' }}>
+                  <div style={{ fontSize: '12px', color: tokens.colorNeutralForeground2 }}>
                     操作成功或失败时显示提示信息
                   </div>
                 </div>
@@ -362,7 +483,7 @@ const SettingsPage: React.FC = () => {
           </div>
         )}
 
-        {selectedTab === 'database' && (
+        {selectedTab === 'database' && user?.isAdmin && (
           <div>
             <Title2>数据库设置</Title2>
             
@@ -427,7 +548,7 @@ const SettingsPage: React.FC = () => {
               <div className={styles.settingRow}>
                 <div className={styles.settingLabel}>
                   <Label>显示语言</Label>
-                  <div style={{ fontSize: '12px', color: '#666' }}>
+                  <div style={{ fontSize: '12px', color: tokens.colorNeutralForeground2 }}>
                     选择系统界面显示的语言
                   </div>
                 </div>
@@ -446,6 +567,171 @@ const SettingsPage: React.FC = () => {
               <MessageBar intent="info" style={{ marginTop: '20px' }}>
                 <MessageBarBody>
                   💡 当前版本仅支持简体中文，其他语言正在开发中
+                </MessageBarBody>
+              </MessageBar>
+            </div>
+          </div>
+        )}
+
+        {selectedTab === 'users' && user?.isAdmin && (
+          <div>
+            <Title2>账号管理</Title2>
+            {error && (
+              <MessageBar intent="error" style={{ marginTop: '16px' }}>
+                <MessageBarBody>{error}</MessageBarBody>
+              </MessageBar>
+            )}
+            {success && (
+              <MessageBar intent="success" style={{ marginTop: '16px' }}>
+                <MessageBarBody>{success}</MessageBarBody>
+              </MessageBar>
+            )}
+            
+            <div style={{ marginTop: '24px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                <Title3>用户列表</Title3>
+                <Button 
+                  appearance="primary"
+                  onClick={() => setCreateUserDialogOpen(true)}
+                >
+                  新建用户
+                </Button>
+              </div>
+              
+              {loadingUsers ? (
+                <div style={{ textAlign: 'center', padding: '20px' }}>
+                  加载用户列表中...
+                </div>
+              ) : (
+                <div style={{ 
+                  border: `1px solid ${tokens.colorNeutralStroke1}`, 
+                  borderRadius: tokens.borderRadiusMedium, 
+                  overflow: 'hidden' 
+                }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                    <thead>
+                      <tr style={{ 
+                        backgroundColor: tokens.colorNeutralBackground2, 
+                        borderBottom: `1px solid ${tokens.colorNeutralStroke1}` 
+                      }}>
+                        <th style={{ 
+                          textAlign: 'left', 
+                          padding: '12px', 
+                          fontWeight: 'bold',
+                          color: tokens.colorNeutralForeground1
+                        }}>用户名</th>
+                        <th style={{ 
+                          textAlign: 'left', 
+                          padding: '12px', 
+                          fontWeight: 'bold',
+                          color: tokens.colorNeutralForeground1
+                        }}>创建时间</th>
+                        <th style={{ 
+                          textAlign: 'left', 
+                          padding: '12px', 
+                          fontWeight: 'bold',
+                          color: tokens.colorNeutralForeground1
+                        }}>状态</th>
+                        <th style={{ 
+                          textAlign: 'center', 
+                          padding: '12px', 
+                          fontWeight: 'bold',
+                          color: tokens.colorNeutralForeground1
+                        }}>操作</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {users.map((listUser, index) => (
+                        <tr key={listUser.id} style={{ 
+                          borderBottom: index < users.length - 1 ? `1px solid ${tokens.colorNeutralStroke2}` : 'none',
+                          backgroundColor: tokens.colorNeutralBackground1
+                        }}>
+                          <td style={{ 
+                            padding: '12px',
+                            color: tokens.colorNeutralForeground1
+                          }}>
+                            {listUser.username}
+                            {listUser.username === 'admin' && (
+                              <span style={{ 
+                                marginLeft: '8px', 
+                                fontSize: '12px', 
+                                color: tokens.colorBrandForeground1, 
+                                fontWeight: 'bold' 
+                              }}>
+                                (管理员)
+                              </span>
+                            )}
+                          </td>
+                          <td style={{ 
+                            padding: '12px', 
+                            color: tokens.colorNeutralForeground2 
+                          }}>
+                            {new Date(listUser.created_at).toLocaleString('zh-CN')}
+                          </td>
+                          <td style={{ 
+                            padding: '12px',
+                            color: tokens.colorNeutralForeground1
+                          }}>
+                            {listUser.must_change_password ? (
+                              <span style={{ 
+                                color: tokens.colorPaletteRedForeground1, 
+                                fontSize: '12px' 
+                              }}>需要修改密码</span>
+                            ) : (
+                              <span style={{ 
+                                color: tokens.colorPaletteGreenForeground1, 
+                                fontSize: '12px' 
+                              }}>正常</span>
+                            )}
+                          </td>
+                          <td style={{ padding: '12px', textAlign: 'center' }}>
+                            {listUser.id !== user?.id && listUser.username !== user?.username && listUser.username !== 'admin' && (
+                              <Button
+                                appearance="subtle"
+                                size="small"
+                                onClick={() => {
+                                  setSelectedUser(listUser);
+                                  setResetPasswordDialogOpen(true);
+                                }}
+                                style={{ marginRight: '8px' }}
+                              >
+                                重置密码
+                              </Button>
+                            )}
+                            {listUser.username !== 'admin' && (
+                              <Button
+                                appearance="subtle"
+                                size="small"
+                                onClick={() => handleDeleteUser(listUser.id, listUser.username)}
+                                style={{ color: tokens.colorPaletteRedForeground1 }}
+                              >
+                                删除
+                              </Button>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                      {users.length === 0 && (
+                        <tr>
+                          <td colSpan={4} style={{ 
+                            padding: '20px', 
+                            textAlign: 'center', 
+                            color: tokens.colorNeutralForeground2,
+                            backgroundColor: tokens.colorNeutralBackground1
+                          }}>
+                            暂无用户数据
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+              
+              <MessageBar intent="info" style={{ marginTop: '20px' }}>
+                <MessageBarBody>
+                  💡 提示：新创建的用户默认拥有与管理员相同的权限，但无法管理其他用户账户。
+                  新用户首次登录时需要修改密码。
                 </MessageBarBody>
               </MessageBar>
             </div>
@@ -528,7 +814,7 @@ const SettingsPage: React.FC = () => {
                         </tbody>
                       </table>
                     ) : (
-                      <div style={{ color: '#666' }}>暂无最近活动记录</div>
+                      <div style={{ color: tokens.colorNeutralForeground2 }}>暂无最近活动记录</div>
                     )}
                   </div>
                 </div>
@@ -537,6 +823,133 @@ const SettingsPage: React.FC = () => {
             <DialogActions>
               <Button appearance="primary" onClick={() => setDbStatsDialogOpen(false)}>
                 关闭
+              </Button>
+            </DialogActions>
+          </DialogBody>
+        </DialogSurface>
+      </Dialog>
+
+      {/* 创建用户对话框 */}
+      <Dialog open={createUserDialogOpen} onOpenChange={(_, data) => setCreateUserDialogOpen(data.open)}>
+        <DialogSurface>
+          <DialogBody>
+            <DialogTitle>创建新用户</DialogTitle>
+            <DialogContent>
+              <form onSubmit={handleCreateUser}>
+                <div className={styles.formField}>
+                  <Label>用户名</Label>
+                  <Input
+                    value={newUsername}
+                    onChange={(e) => setNewUsername(e.target.value)}
+                    placeholder="请输入用户名"
+                    required
+                  />
+                </div>
+                <div className={styles.formField}>
+                  <Label>密码</Label>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <Input
+                      type="password"
+                      value={newUserPassword}
+                      onChange={(e) => setNewUserPassword(e.target.value)}
+                      placeholder="请输入密码"
+                      required
+                      style={{ flex: 1 }}
+                    />
+                    <Button 
+                      type="button"
+                      appearance="secondary" 
+                      onClick={generatePassword}
+                    >
+                      生成
+                    </Button>
+                  </div>
+                  <div style={{ fontSize: '12px', color: tokens.colorNeutralForeground2, marginTop: '4px' }}>
+                    密码要求：至少8位，包含大小写字母和数字/符号
+                  </div>
+                </div>
+                
+                <div className={styles.formField}>
+                  <Checkbox
+                    checked={mustChangePassword}
+                    onChange={(_, data) => setMustChangePassword(Boolean(data.checked))}
+                    label="用户首次登录时必须修改密码"
+                  />
+                </div>
+              </form>
+            </DialogContent>
+            <DialogActions>
+              <Button
+                appearance="secondary"
+                onClick={() => {
+                  setCreateUserDialogOpen(false);
+                  setNewUsername('');
+                  setNewUserPassword('');
+                }}
+              >
+                取消
+              </Button>
+              <Button appearance="primary" onClick={handleCreateUser}>
+                创建用户
+              </Button>
+            </DialogActions>
+          </DialogBody>
+        </DialogSurface>
+      </Dialog>
+
+      {/* 重置密码对话框 */}
+      <Dialog open={resetPasswordDialogOpen} onOpenChange={(_, data) => setResetPasswordDialogOpen(data.open)}>
+        <DialogSurface>
+          <DialogBody>
+            <DialogTitle>重置用户密码</DialogTitle>
+            <DialogContent>
+              {selectedUser && (
+                <div>
+                  <div style={{ marginBottom: '16px' }}>
+                    <Label>用户：</Label>
+                    <span style={{ fontWeight: 'bold', marginLeft: '8px' }}>{selectedUser.username}</span>
+                  </div>
+                  <form onSubmit={handleResetPassword}>
+                    <div className={styles.formField}>
+                      <Label>新密码</Label>
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        <Input
+                          type="password"
+                          value={resetPassword}
+                          onChange={(e) => setResetPassword(e.target.value)}
+                          placeholder="请输入新密码"
+                          required
+                          style={{ flex: 1 }}
+                        />
+                        <Button 
+                          type="button"
+                          appearance="secondary" 
+                          onClick={generateResetPassword}
+                        >
+                          生成
+                        </Button>
+                      </div>
+                      <div style={{ fontSize: '12px', color: tokens.colorNeutralForeground2, marginTop: '4px' }}>
+                        用户下次登录时需要修改此密码
+                      </div>
+                    </div>
+                  </form>
+                </div>
+              )}
+            </DialogContent>
+            <DialogActions>
+              <Button
+                appearance="secondary"
+                onClick={() => {
+                  setResetPasswordDialogOpen(false);
+                  setSelectedUser(null);
+                  setResetPassword('');
+                }}
+              >
+                取消
+              </Button>
+              <Button appearance="primary" onClick={handleResetPassword}>
+                重置密码
               </Button>
             </DialogActions>
           </DialogBody>

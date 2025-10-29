@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Spinner, Toast, Toaster, ToastTitle, useId, useToastController } from '@fluentui/react-components';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import LoginPage from './pages/LoginPage';
@@ -119,7 +119,7 @@ const AppContent: React.FC = () => {
   return (
     <>
       <Toaster toasterId={toasterId} />
-      <BrowserRouter>
+      <HashRouter>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route path="/forgot-password" element={<ForgotPasswordPage />} />
@@ -140,7 +140,7 @@ const AppContent: React.FC = () => {
             }
           />
         </Routes>
-      </BrowserRouter>
+      </HashRouter>
     </>
   );
 };

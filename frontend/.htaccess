@@ -1,0 +1,7 @@
+# Apache配置示例 (.htaccess文件放在构建输出目录中)
+Options -MultiViews
+RewriteEngine On
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteRule ^ index.html [QSA,L]
+
+

@@ -42,6 +42,8 @@ import {
   CalendarLtr20Regular,
 } from '@fluentui/react-icons';
 import { lectureRecordsAPI } from '../services/api';
+import { useAuth } from '../contexts/AuthContext';
+import PageTitle from '../components/PageTitle';
 
 const useStyles = makeStyles({
   container: {
@@ -108,6 +110,7 @@ const LectureRecordsPage: React.FC = () => {
   const styles = useStyles();
   const toasterId = useId('toaster');
   const { dispatchToast } = useToastController(toasterId);
+  const { user } = useAuth();
 
   const [records, setRecords] = useState<LectureRecord[]>([]);
   const [loading, setLoading] = useState(false);
@@ -149,6 +152,7 @@ const LectureRecordsPage: React.FC = () => {
   // Statistics states
   const [statistics, setStatistics] = useState<any>(null);
   const [showStatistics, setShowStatistics] = useState(false);
+  const [loadingStatistics, setLoadingStatistics] = useState(false);
 
   // Fetch records
   const fetchRecords = async () => {
@@ -179,24 +183,39 @@ const LectureRecordsPage: React.FC = () => {
 
   // Fetch statistics
   const fetchStatistics = async () => {
+    setLoadingStatistics(true);
     try {
       const response = await lectureRecordsAPI.getStatistics();
       setStatistics(response.data);
     } catch (err: any) {
       console.error('Failed to fetch statistics:', err);
+      dispatchToast(
+        <Toast>
+          <ToastTitle>统计加载失败：{err.response?.data?.error || '未知错误'}</ToastTitle>
+        </Toast>,
+        { intent: 'error' }
+      );
+    } finally {
+      setLoadingStatistics(false);
     }
   };
 
   const hasFetched = React.useRef(false);
 
   useEffect(() => {
+    // Check if user is authenticated
+    if (!user) {
+      setError('请先登录');
+      return;
+    }
+    
     // Prevent duplicate calls in React StrictMode (development only)
     if (hasFetched.current) return;
     hasFetched.current = true;
     
     fetchRecords();
     fetchStatistics();
-  }, []);
+  }, [user]);
 
   // Handle add
   const handleAdd = async () => {
@@ -451,10 +470,7 @@ const LectureRecordsPage: React.FC = () => {
       {/* Header */}
       <div className={styles.header}>
         <div className={styles.headerLeft}>
-          <Title2>教师听课记录</Title2>
-          <Body1 style={{ color: tokens.colorNeutralForeground3 }}>
-            管理和查看教师听课记录
-          </Body1>
+          <PageTitle title="教师听课记录" subtitle="管理和查看教师听课记录" />
         </div>
         <div className={styles.headerActions}>
           <Button
@@ -492,45 +508,58 @@ const LectureRecordsPage: React.FC = () => {
           )}
           <Button
             appearance="subtle"
-            onClick={() => setShowStatistics(!showStatistics)}
+            onClick={() => {
+              if (!showStatistics && !statistics) {
+                fetchStatistics();
+              }
+              setShowStatistics(!showStatistics);
+            }}
+            disabled={loadingStatistics}
           >
-            {showStatistics ? '隐藏统计' : '📊 显示统计'}
+            {loadingStatistics ? '加载中...' : showStatistics ? '隐藏统计' : '📊 显示统计'}
           </Button>
         </div>
       </div>
 
       {/* Statistics Section */}
-      {showStatistics && statistics && (
-        <Card style={{ marginBottom: '24px', padding: '20px' }}>
-          <Title2 style={{ marginBottom: '16px' }}>📊 听课统计分析</Title2>
-          
-          {/* Overall Statistics */}
-          <div style={{ 
-            display: 'grid', 
-            gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', 
-            gap: '16px',
-            marginBottom: '24px'
-          }}>
-            <Card style={{ padding: '16px', textAlign: 'center', backgroundColor: tokens.colorBrandBackground2 }}>
-              <Body1 style={{ color: tokens.colorNeutralForeground3, marginBottom: '8px' }}>总记录数</Body1>
-              <Title2>{statistics.overall.total_records}</Title2>
-            </Card>
-            <Card style={{ padding: '16px', textAlign: 'center', backgroundColor: tokens.colorNeutralBackground3 }}>
-              <Body1 style={{ color: tokens.colorNeutralForeground3, marginBottom: '8px' }}>听课教师</Body1>
-              <Title2>{statistics.overall.total_observers}</Title2>
-            </Card>
-            <Card style={{ padding: '16px', textAlign: 'center', backgroundColor: tokens.colorNeutralBackground3 }}>
-              <Body1 style={{ color: tokens.colorNeutralForeground3, marginBottom: '8px' }}>授课教师</Body1>
-              <Title2>{statistics.overall.total_teachers}</Title2>
-            </Card>
-            <Card style={{ padding: '16px', textAlign: 'center', backgroundColor: tokens.colorNeutralBackground3 }}>
-              <Body1 style={{ color: tokens.colorNeutralForeground3, marginBottom: '8px' }}>涉及班级</Body1>
-              <Title2>{statistics.overall.total_classes}</Title2>
-            </Card>
-          </div>
+      {showStatistics && (
+        loadingStatistics ? (
+          <Card style={{ marginBottom: '24px', padding: '20px', textAlign: 'center' }}>
+            <Spinner size="large" />
+            <div style={{ marginTop: '16px' }}>正在加载统计数据...</div>
+          </Card>
+        ) : (
+          statistics ? (
+            <Card style={{ marginBottom: '24px', padding: '20px' }}>
+              <Title2 style={{ marginBottom: '16px' }}>📊 听课统计分析</Title2>
+              
+              {/* Overall Statistics */}
+              <div style={{ 
+                display: 'grid', 
+                gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', 
+                gap: '16px',
+                marginBottom: '24px'
+              }}>
+                <Card style={{ padding: '16px', textAlign: 'center', backgroundColor: tokens.colorBrandBackground2 }}>
+                  <Body1 style={{ color: tokens.colorNeutralForeground3, marginBottom: '8px' }}>总记录数</Body1>
+                  <Title2>{statistics.overall.total_records}</Title2>
+                </Card>
+                <Card style={{ padding: '16px', textAlign: 'center', backgroundColor: tokens.colorNeutralBackground3 }}>
+                  <Body1 style={{ color: tokens.colorNeutralForeground3, marginBottom: '8px' }}>听课教师</Body1>
+                  <Title2>{statistics.overall.total_observers}</Title2>
+                </Card>
+                <Card style={{ padding: '16px', textAlign: 'center', backgroundColor: tokens.colorNeutralBackground3 }}>
+                  <Body1 style={{ color: tokens.colorNeutralForeground3, marginBottom: '8px' }}>授课教师</Body1>
+                  <Title2>{statistics.overall.total_teachers}</Title2>
+                </Card>
+                <Card style={{ padding: '16px', textAlign: 'center', backgroundColor: tokens.colorNeutralBackground3 }}>
+                  <Body1 style={{ color: tokens.colorNeutralForeground3, marginBottom: '8px' }}>涉及班级</Body1>
+                  <Title2>{statistics.overall.total_classes}</Title2>
+                </Card>
+              </div>
 
-          {/* Observer Statistics (听课教师排行) */}
-          <div style={{ marginBottom: '24px' }}>
+              {/* Observer Statistics (听课教师排行) */}
+              <div style={{ marginBottom: '24px' }}>
             <Title3 style={{ marginBottom: '12px' }}>👨‍🏫 听课教师排行（前10名）</Title3>
             <Card style={{ padding: '0', overflow: 'hidden' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -631,6 +660,8 @@ const LectureRecordsPage: React.FC = () => {
             </Card>
           </div>
         </Card>
+          ) : null
+        )
       )}
 
       {/* Filters */}

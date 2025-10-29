@@ -2,7 +2,17 @@ import express, { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import rateLimit from 'express-rate-limit';
-import db, { encryptPassword, decryptPassword } from '../models/database';
+import { authenticateToken } from '../middleware/auth';
+import db, { 
+  encryptPassword, 
+  decryptPassword, 
+  isAdminUser, 
+  getAllUsers, 
+  createUser, 
+  resetUserPassword, 
+  deleteUser, 
+  generateRandomPassword 
+} from '../models/database';
 import logger from '../utils/logger';
 import { 
   encryptCookie, 
@@ -149,10 +159,10 @@ function validatePasswordStrength(password: string): { valid: boolean; error?: s
   return { valid: true };
 }
 
-// 用户注册 - 已禁用，系统只允许单个管理员用户
+// 用户注册 - 公开注册已禁用，只允许管理员创建用户
 router.post('/register', async (req: Request, res: Response) => {
   return res.status(403).json({ 
-    error: '注册功能已禁用，系统只允许单个管理员账户。如需重置，请联系系统管理员。' 
+    error: '公开注册功能已禁用。只有管理员可以创建新用户账户。' 
   });
 });
 
@@ -293,9 +303,15 @@ router.post('/security-question', (req: Request, res: Response) => {
       return res.status(400).json({ error: '输入包含非法字符' });
     }
 
+    // 只有admin用户才能获取密保问题
+    if (username !== 'admin') {
+      // 统一返回404，避免暴露用户存在性信息
+      return res.status(404).json({ error: '用户不存在或不支持重置密码' });
+    }
+
     const user = db.prepare('SELECT security_question FROM users WHERE username = ?').get(username) as any;
     if (!user) {
-      return res.status(404).json({ error: '用户不存在' });
+      return res.status(404).json({ error: '用户不存在或不支持重置密码' });
     }
 
     res.json({ securityQuestion: user.security_question });
@@ -668,6 +684,172 @@ router.post('/first-login-setup', async (req: Request, res: Response) => {
   } catch (error) {
     logger.error('First login setup failed:', error);
     res.status(500).json({ error: '设置失败' });
+  }
+});
+
+// ===== 用户管理 API (仅管理员) =====
+
+// 中间件：检查管理员权限
+const requireAdmin = (req: any, res: Response, next: any) => {
+  const userId = req.userId;
+  if (!userId) {
+    return res.status(401).json({ error: '未认证' });
+  }
+  
+  if (!isAdminUser(userId)) {
+    logger.warn('Non-admin user attempted admin operation', { userId });
+    return res.status(403).json({ error: '需要管理员权限' });
+  }
+  
+  next();
+};
+
+// 获取所有用户列表
+router.get('/users', authenticateToken, requireAdmin, (req: Request, res: Response) => {
+  try {
+    const users = getAllUsers();
+    res.json({ users });
+  } catch (error) {
+    logger.error('Failed to get users list:', error);
+    res.status(500).json({ error: '获取用户列表失败' });
+  }
+});
+
+// 创建新用户
+router.post('/users', authenticateToken, requireAdmin, async (req: any, res: Response) => {
+  try {
+    const { username, password, mustChangePassword = true } = req.body;
+    
+    if (!username || !password) {
+      return res.status(400).json({ error: '用户名和密码是必填的' });
+    }
+    
+    // 验证用户名格式
+    const usernameValidation = validateUsername(username);
+    if (!usernameValidation.valid) {
+      return res.status(400).json({ error: usernameValidation.error });
+    }
+    
+    // 验证密码格式
+    const passwordValidation = validatePasswordFormat(password);
+    if (!passwordValidation.valid) {
+      return res.status(400).json({ error: passwordValidation.error });
+    }
+    
+    // 验证密码强度
+    const strengthValidation = validatePasswordStrength(password);
+    if (!strengthValidation.valid) {
+      return res.status(400).json({ error: strengthValidation.error });
+    }
+    
+    // 创建用户
+    const newUserId = await createUser(username, password, req.userId, mustChangePassword);
+    
+    logger.info('New user created by admin', { 
+      newUserId, 
+      username, 
+      mustChangePassword,
+      createdBy: req.userId 
+    });
+    
+    res.status(201).json({ 
+      message: '用户创建成功',
+      userId: newUserId,
+      username,
+      mustChangePassword
+    });
+  } catch (error: any) {
+    logger.error('Failed to create user:', error);
+    res.status(500).json({ 
+      error: error.message === '用户名已存在' ? error.message : '创建用户失败' 
+    });
+  }
+});
+
+// 重置用户密码
+router.post('/users/:id/reset-password', authenticateToken, requireAdmin, async (req: any, res: Response) => {
+  try {
+    const userId = parseInt(req.params.id);
+    const { newPassword } = req.body;
+    
+    if (!newPassword) {
+      return res.status(400).json({ error: '新密码是必填的' });
+    }
+    
+    if (isNaN(userId)) {
+      return res.status(400).json({ error: '无效的用户ID' });
+    }
+    
+    // 验证新密码格式
+    const passwordValidation = validatePasswordFormat(newPassword);
+    if (!passwordValidation.valid) {
+      return res.status(400).json({ error: passwordValidation.error });
+    }
+    
+    // 验证密码强度
+    const strengthValidation = validatePasswordStrength(newPassword);
+    if (!strengthValidation.valid) {
+      return res.status(400).json({ error: strengthValidation.error });
+    }
+    
+    // 重置密码
+    await resetUserPassword(userId, newPassword, req.userId);
+    
+    logger.info('User password reset by admin', { 
+      targetUserId: userId, 
+      resetBy: req.userId 
+    });
+    
+    res.json({ message: '密码重置成功，用户下次登录时需要修改密码' });
+  } catch (error: any) {
+    logger.error('Failed to reset user password:', error);
+    res.status(500).json({ 
+      error: error.message === '用户不存在' ? error.message : '重置密码失败' 
+    });
+  }
+});
+
+// 生成随机密码（用于创建用户或重置密码）
+router.get('/generate-password', authenticateToken, requireAdmin, (req: Request, res: Response) => {
+  try {
+    const length = parseInt(req.query.length as string) || 12;
+    if (length < 8 || length > 32) {
+      return res.status(400).json({ error: '密码长度必须在8-32位之间' });
+    }
+    
+    const password = generateRandomPassword(length);
+    res.json({ password });
+  } catch (error) {
+    logger.error('Failed to generate password:', error);
+    res.status(500).json({ error: '生成密码失败' });
+  }
+});
+
+// 删除用户
+router.delete('/users/:id', authenticateToken, requireAdmin, (req: any, res: Response) => {
+  try {
+    const userId = parseInt(req.params.id);
+    
+    if (isNaN(userId)) {
+      return res.status(400).json({ error: '无效的用户ID' });
+    }
+    
+    // 删除用户
+    deleteUser(userId, req.userId);
+    
+    logger.info('User deleted by admin', { 
+      deletedUserId: userId, 
+      deletedBy: req.userId 
+    });
+    
+    res.json({ message: '用户删除成功' });
+  } catch (error: any) {
+    logger.error('Failed to delete user:', error);
+    const knownErrors = ['用户不存在', '不能删除管理员账户', '不能删除自己的账户'];
+    if (knownErrors.includes(error.message)) {
+      return res.status(400).json({ error: error.message });
+    }
+    res.status(500).json({ error: '删除用户失败' });
   }
 });
 

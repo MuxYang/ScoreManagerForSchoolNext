@@ -16,7 +16,6 @@ import {
   DialogContent,
   Field,
   tokens,
-  Subtitle1,
   Body1,
   Checkbox,
 } from '@fluentui/react-components';
@@ -32,22 +31,37 @@ import {
 } from '@fluentui/react-icons';
 import { teacherAPI, scoreAPI } from '../services/api';
 import { useNavigate } from 'react-router-dom';
+import PageTitle from '../components/PageTitle';
 
 const useStyles = makeStyles({
   container: {
     padding: '20px',
     maxWidth: '1600px',
     margin: '0 auto',
+    '@media (max-width: 768px)': {
+      padding: '12px 8px',
+      maxWidth: '100%',
+    },
   },
   header: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: '24px',
+    '@media (max-width: 768px)': {
+      flexDirection: 'column',
+      gap: '12px',
+      alignItems: 'stretch',
+      marginBottom: '16px',
+    },
   },
   actions: {
     display: 'flex',
     gap: '12px',
+    '@media (max-width: 768px)': {
+      flexDirection: 'column',
+      gap: '8px',
+    },
   },
   subjectGroup: {
     marginBottom: '24px',
@@ -407,7 +421,7 @@ const TeachersPageComplete: React.FC = () => {
   return (
     <div className={styles.container}>
       <div className={styles.header}>
-        <Subtitle1>教师管理</Subtitle1>
+        <PageTitle title="教师管理" subtitle="管理教师信息和积分记录" />
         <div className={styles.actions}>
           <Button
             appearance="primary"

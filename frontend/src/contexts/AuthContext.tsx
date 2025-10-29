@@ -5,6 +5,7 @@ interface User {
   id: number;
   username: string;
   mustChangePassword?: boolean;
+  isAdmin?: boolean;
 }
 
 interface AuthContextType {
@@ -18,8 +19,8 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// 超时时间：10 分钟（毫秒）
-const INACTIVITY_TIMEOUT = 10 * 60 * 1000;
+// 超时时间：5 分钟（毫秒）
+const INACTIVITY_TIMEOUT = 5 * 60 * 1000;
 
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
@@ -27,6 +28,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [isLoading, setIsLoading] = useState(true); // 初始加载状态
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
   const hasTriedCookieAuth = useRef(false); // 防止重复尝试
+  const networkCheckIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   // 清除所有认证信息
   const clearAuth = useCallback(() => {
@@ -39,6 +41,15 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current);
       timeoutRef.current = null;
+    }
+    if (networkCheckIntervalRef.current) {
+      clearInterval(networkCheckIntervalRef.current);
+      networkCheckIntervalRef.current = null;
+    }
+    
+    // 强制跳转到登录页面
+    if (window.location.pathname !== '/login') {
+      window.location.href = '/login';
     }
   }, []);
 
@@ -55,7 +66,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     // 设置新的计时器
     timeoutRef.current = setTimeout(() => {
-      console.log('用户无操作超过 10 分钟，自动登出');
+      console.log('用户无操作超过 5 分钟，自动登出');
       clearAuth();
       // 如果在登录页面则不需要跳转
       if (window.location.pathname !== '/login') {
@@ -74,6 +85,50 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     return timeSinceLastActivity > INACTIVITY_TIMEOUT;
   }, []);
+
+  // 检查后端服务连接状态
+  const checkBackendConnection = useCallback(async () => {
+    if (!token) return;
+
+    try {
+      // 使用一个简单的健康检查接口
+      const response = await fetch('/api/auth/token', {
+        method: 'GET',
+        signal: AbortSignal.timeout(5000), // 5秒超时
+      });
+      
+      if (!response.ok) {
+        throw new Error(`后端服务响应异常: ${response.status}`);
+      }
+    } catch (error: any) {
+      console.error('后端服务连接检查失败:', error.message);
+      
+      // 如果是网络错误或连接超时，自动退出登录
+      if (error.name === 'AbortError' || 
+          error.message?.includes('timeout') ||
+          error.message?.includes('Network Error') ||
+          error.message?.includes('ERR_CONNECTION_REFUSED')) {
+        
+        console.log('检测到后端服务不可用，自动退出登录');
+        clearAuth();
+        
+        // 跳转到登录页
+        if (window.location.pathname !== '/login') {
+          window.location.href = '/login';
+        }
+      }
+    }
+  }, [token, clearAuth]);
+
+  // 启动网络连接检测
+  const startNetworkCheck = useCallback(() => {
+    if (networkCheckIntervalRef.current) {
+      clearInterval(networkCheckIntervalRef.current);
+    }
+    
+    // 每30秒检查一次后端连接
+    networkCheckIntervalRef.current = setInterval(checkBackendConnection, 30000);
+  }, [checkBackendConnection]);
 
   useEffect(() => {
     // 尝试使用 Cookie 自动登录
@@ -95,13 +150,19 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
               const response = await authAPI.verifyCookie(savedEncryptedCookie);
               const { token: newToken, user: newUser, encryptedCookie: newEncryptedCookie } = response.data;
               
+              // 设置用户是否为管理员
+              const userWithRole = {
+                ...newUser,
+                isAdmin: newUser.username === 'admin'
+              };
+              
               // Cookie验证成功，使用新的token和cookie
               setToken(newToken);
-              setUser(newUser);
+              setUser(userWithRole);
               
               // 更新localStorage
               localStorage.setItem('token', newToken);
-              localStorage.setItem('user', JSON.stringify(newUser));
+              localStorage.setItem('user', JSON.stringify(userWithRole));
               localStorage.setItem('encryptedCookie', newEncryptedCookie);
               
               resetTimeout();
@@ -161,21 +222,58 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     };
   }, [token, resetTimeout]);
 
+  // 监听网络状态变化
+  useEffect(() => {
+    if (!token) return;
+
+    const handleOnline = () => {
+      console.log('网络连接已恢复');
+      // 网络恢复时，立即检查后端连接
+      checkBackendConnection();
+    };
+
+    const handleOffline = () => {
+      console.log('网络连接已断开');
+      // 网络断开时，清除认证信息
+      clearAuth();
+      if (window.location.pathname !== '/login') {
+        window.location.href = '/login';
+      }
+    };
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, [token, checkBackendConnection, clearAuth]);
+
   const login = async (username: string, password: string) => {
     const response = await authAPI.login(username, password);
     const { token: newToken, user: newUser, encryptedCookie } = response.data;
     
+    // 设置用户是否为管理员
+    const userWithRole = {
+      ...newUser,
+      isAdmin: newUser.username === 'admin'
+    };
+    
     setToken(newToken);
-    setUser(newUser);
+    setUser(userWithRole);
     
     localStorage.setItem('token', newToken);
-    localStorage.setItem('user', JSON.stringify(newUser));
+    localStorage.setItem('user', JSON.stringify(userWithRole));
     if (encryptedCookie) {
       localStorage.setItem('encryptedCookie', encryptedCookie);
     }
     
     // 重置超时计时器
     resetTimeout();
+    
+    // 启动网络连接检测
+    startNetworkCheck();
     
     // 登录成功后，异步检查AI模型信息（不阻塞登录流程）
     setTimeout(() => {

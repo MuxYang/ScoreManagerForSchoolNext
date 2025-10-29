@@ -276,6 +276,63 @@ router.post('/batch', authenticateToken, (req: Request, res: Response) => {
   }
 });
 
+// 检查重复记录
+router.post('/check-duplicates', authenticateToken, (req: Request, res: Response) => {
+  try {
+    const { records } = req.body;
+    const authReq = req as AuthRequest;
+
+    if (!Array.isArray(records) || records.length === 0) {
+      return res.status(400).json({ error: '检查数据格式错误' });
+    }
+
+    const today = new Date().toISOString().split('T')[0];
+    const duplicates: any[] = [];
+
+    for (const record of records) {
+      const { name, className, teacherName, reason } = record;
+      
+      if (!name || !reason) continue;
+
+      // 查找当天相同学生、相同教师、相同原因的记录
+      const existingRecord = db.prepare(`
+        SELECT s.*, st.name as student_name, st.class
+        FROM scores s
+        JOIN students st ON s.student_id = st.id
+        WHERE st.name = ? 
+        AND s.teacher_name = ? 
+        AND s.reason = ? 
+        AND s.date = ?
+      `).get(name, teacherName || '', reason, today);
+
+      if (existingRecord) {
+        duplicates.push({
+          ...record,
+          existingRecord: {
+            id: (existingRecord as any).id,
+            studentName: (existingRecord as any).student_name,
+            className: (existingRecord as any).class,
+            teacherName: (existingRecord as any).teacher_name,
+            reason: (existingRecord as any).reason,
+            points: (existingRecord as any).points,
+            date: (existingRecord as any).date
+          }
+        });
+      }
+    }
+
+    res.json({
+      hasDuplicates: duplicates.length > 0,
+      duplicates: duplicates,
+      message: duplicates.length > 0 ? `发现 ${duplicates.length} 条重复记录` : '未发现重复记录'
+    });
+
+  } catch (error: any) {
+    logger.error('Failed to check duplicates:', error);
+    res.status(500).json({ error: '检查重复记录失败: ' + error.message });
+  }
+});
+
 // AI批量导入量化记录（智能匹配，未匹配的进入待处理）
 // 量化数据从数据库读取（默认2分），前端只需传递学生信息
 router.post('/ai-import', authenticateToken, (req: Request, res: Response) => {

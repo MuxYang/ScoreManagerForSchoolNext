@@ -24,6 +24,8 @@ import {
 } from '@fluentui/react-components';
 import { ArrowDownload20Regular, ArrowSync20Regular, Delete20Regular } from '@fluentui/react-icons';
 import { backupAPI } from '../services/api';
+import { useAuth } from '../contexts/AuthContext';
+import PageTitle from '../components/PageTitle';
 
 const useStyles = makeStyles({
   container: {
@@ -55,12 +57,25 @@ interface Backup {
 
 const BackupPage: React.FC = () => {
   const styles = useStyles();
+  const { user } = useAuth();
   const [backups, setBackups] = useState<Backup[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [restoreDialogOpen, setRestoreDialogOpen] = useState(false);
   const [selectedBackup, setSelectedBackup] = useState<string | null>(null);
+
+  // 检查管理员权限
+  if (!user?.isAdmin) {
+    return (
+      <div className={styles.container}>
+        <Card style={{ padding: '40px', textAlign: 'center' }}>
+          <h2>访问被拒绝</h2>
+          <p>您没有权限访问备份恢复功能，此功能仅限管理员使用。</p>
+        </Card>
+      </div>
+    );
+  }
 
   useEffect(() => {
     loadBackups();
@@ -180,7 +195,7 @@ const BackupPage: React.FC = () => {
   return (
     <div className={styles.container}>
       <div className={styles.header}>
-        <h2>备份与恢复</h2>
+        <PageTitle title="备份与恢复" subtitle="管理数据库备份和恢复操作" />
         <Button
           appearance="primary"
           icon={<ArrowDownload20Regular />}

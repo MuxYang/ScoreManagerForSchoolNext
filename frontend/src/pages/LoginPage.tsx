@@ -19,23 +19,43 @@ const useStyles = makeStyles({
     alignItems: 'center',
     minHeight: '100vh',
     backgroundColor: tokens.colorNeutralBackground2,
+    padding: '16px',
+    '@media (max-width: 768px)': {
+      padding: '8px',
+    },
   },
   card: {
-    width: '400px',
+    width: '100%',
+    maxWidth: '400px',
     padding: '32px',
+    '@media (max-width: 768px)': {
+      padding: '24px 20px',
+      margin: '0 8px',
+    },
   },
   title: {
     marginBottom: '24px',
     textAlign: 'center',
+    fontSize: '24px',
+    '@media (max-width: 768px)': {
+      fontSize: '20px',
+      marginBottom: '16px',
+    },
   },
   form: {
     display: 'flex',
     flexDirection: 'column',
     gap: '16px',
+    '@media (max-width: 768px)': {
+      gap: '12px',
+    },
   },
   footer: {
     marginTop: '16px',
     textAlign: 'center',
+    '@media (max-width: 768px)': {
+      marginTop: '12px',
+    },
   },
 });
 

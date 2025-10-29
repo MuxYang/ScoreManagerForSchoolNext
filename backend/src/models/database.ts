@@ -242,15 +242,118 @@ export function decryptPassword(encryptedPassword: string, securityAnswer: strin
   return decrypted;
 }
 
-// 检查用户数量（系统只允许单个用户）
+// 检查用户数量
 export function getUserCount(): number {
   const result = db.prepare('SELECT COUNT(*) as count FROM users').get() as { count: number };
   return result.count;
 }
 
-// 验证是否可以创建新用户（只在没有用户时允许）
-export function canCreateUser(): boolean {
-  return getUserCount() === 0;
+// 验证是否可以创建新用户（管理员可以创建，或者没有用户时）
+export function canCreateUser(isAdmin: boolean = false): boolean {
+  return isAdmin || getUserCount() === 0;
+}
+
+// 检查用户是否为管理员
+export function isAdminUser(userId: number): boolean {
+  const user = db.prepare('SELECT username FROM users WHERE id = ?').get(userId) as any;
+  return user && user.username === 'admin';
+}
+
+// 获取所有用户（不包括密码等敏感信息）
+export function getAllUsers(): any[] {
+  return db.prepare(`
+    SELECT id, username, created_at, updated_at, must_change_password
+    FROM users
+    ORDER BY created_at
+  `).all();
+}
+
+// 创建新用户（管理员功能）
+export async function createUser(username: string, password: string, createdBy: number, mustChangePassword: boolean = true): Promise<number> {
+  const bcrypt = require('bcryptjs');
+  
+  // 检查用户名是否已存在
+  const existingUser = db.prepare('SELECT id FROM users WHERE username = ?').get(username);
+  if (existingUser) {
+    throw new Error('用户名已存在');
+  }
+  
+  const passwordHash = await bcrypt.hash(password, 10);
+  const defaultSecurityQuestion = '请在首次登录时设置密保问题';
+  const defaultSecurityAnswer = 'default';
+  
+  // 使用默认密保答案加密密码
+  const encryptedPassword = encryptPassword(password, defaultSecurityAnswer);
+  
+  const result = db.prepare(`
+    INSERT INTO users (username, password_hash, security_question, encrypted_password, must_change_password)
+    VALUES (?, ?, ?, ?, ?)
+  `).run(username, passwordHash, defaultSecurityQuestion, encryptedPassword, mustChangePassword ? 1 : 0);
+  
+  // 记录创建日志
+  db.prepare('INSERT INTO logs (user_id, action, details) VALUES (?, ?, ?)')
+    .run(createdBy, 'CREATE_USER', `创建用户: ${username}, 需要修改密码: ${mustChangePassword}`);
+  
+  return result.lastInsertRowid as number;
+}
+
+// 重置用户密码（管理员功能）
+export async function resetUserPassword(userId: number, newPassword: string, resetBy: number): Promise<void> {
+  const bcrypt = require('bcryptjs');
+  
+  // 获取用户信息
+  const user = db.prepare('SELECT username FROM users WHERE id = ?').get(userId) as any;
+  if (!user) {
+    throw new Error('用户不存在');
+  }
+  
+  // 检查是否尝试重置自己的密码
+  if (userId === resetBy) {
+    throw new Error('不能重置自己的密码');
+  }
+  
+  const passwordHash = await bcrypt.hash(newPassword, 10);
+  const defaultSecurityAnswer = 'default';
+  const encryptedPassword = encryptPassword(newPassword, defaultSecurityAnswer);
+  
+  // 重置密码并强制用户在下次登录时修改
+  db.prepare(`
+    UPDATE users 
+    SET password_hash = ?, 
+        encrypted_password = ?, 
+        security_question = '请在首次登录时设置密保问题',
+        must_change_password = 1, 
+        updated_at = CURRENT_TIMESTAMP
+    WHERE id = ?
+  `).run(passwordHash, encryptedPassword, userId);
+  
+  // 记录重置日志
+  db.prepare('INSERT INTO logs (user_id, action, details) VALUES (?, ?, ?)')
+    .run(resetBy, 'RESET_PASSWORD', `重置用户密码: ${user.username}`);
+}
+
+// 删除用户（管理员功能，不能删除管理员自己）
+export function deleteUser(userId: number, deletedBy: number): void {
+  // 检查是否是管理员账户
+  const user = db.prepare('SELECT username FROM users WHERE id = ?').get(userId) as any;
+  if (!user) {
+    throw new Error('用户不存在');
+  }
+  
+  if (user.username === 'admin') {
+    throw new Error('不能删除管理员账户');
+  }
+  
+  if (userId === deletedBy) {
+    throw new Error('不能删除自己的账户');
+  }
+  
+  // 删除用户
+  db.prepare('DELETE FROM users WHERE id = ?').run(userId);
+  
+  // 记录删除日志
+  db.prepare('INSERT INTO logs (user_id, action, details) VALUES (?, ?, ?)')
+    .run(deletedBy, 'DELETE_USER', `删除用户: ${user.username}`);
 }
 
 // Generate random password (16 characters, includes uppercase, lowercase, numbers and special characters)

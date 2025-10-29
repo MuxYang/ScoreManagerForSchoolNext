@@ -1,7 +1,20 @@
 import axios from 'axios';
 
 // 根据环境选择 API 基础 URL
-const API_BASE_URL = import.meta.env.DEV ? '/api' : 'http://localhost:3000/api';
+const getApiBaseUrl = () => {
+  if (import.meta.env.DEV) {
+    return '/api'; // 开发模式使用代理
+  }
+  
+  // 生产模式：动态构建API URL
+  const hostname = window.location.hostname;
+  const port = '3000';
+  const protocol = window.location.protocol;
+  
+  return `${protocol}//${hostname}:${port}/api`;
+};
+
+const API_BASE_URL = getApiBaseUrl();
 
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
@@ -63,16 +76,44 @@ apiClient.interceptors.request.use(
 apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
+    // 处理认证错误
     if (error.response?.status === 401) {
       // 清除 localStorage
       localStorage.removeItem('token');
       localStorage.removeItem('user');
       localStorage.removeItem('lastActivity');
+      localStorage.removeItem('encryptedCookie');
       // 跳转到登录页
       if (window.location.pathname !== '/login') {
         window.location.href = '/login';
       }
     }
+    
+    // 处理网络错误和后端服务不可用
+    if (!error.response) {
+      // 网络错误、连接超时、后端服务不可用等情况
+      if (error.code === 'NETWORK_ERROR' || 
+          error.code === 'ECONNREFUSED' || 
+          error.code === 'ETIMEDOUT' ||
+          error.message?.includes('Network Error') ||
+          error.message?.includes('timeout') ||
+          error.message?.includes('ERR_CONNECTION_REFUSED')) {
+        
+        console.error('后端服务不可用，自动退出登录:', error.message);
+        
+        // 清除本地认证信息
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        localStorage.removeItem('lastActivity');
+        localStorage.removeItem('encryptedCookie');
+        
+        // 跳转到登录页
+        if (window.location.pathname !== '/login') {
+          window.location.href = '/login';
+        }
+      }
+    }
+    
     return Promise.reject(error);
   }
 );
@@ -106,6 +147,22 @@ export const authAPI = {
     apiClient.post('/auth/first-login-setup', data),
   
   logout: () => apiClient.post('/auth/logout'),
+  
+  // 用户管理 API (仅管理员)
+  getUsers: () => apiClient.get('/auth/users'),
+  
+  createUser: (username: string, password: string, mustChangePassword: boolean = true) =>
+    apiClient.post('/auth/users', { username, password, mustChangePassword }),
+  
+  resetUserPassword: (userId: number, newPassword: string) =>
+    apiClient.post(`/auth/users/${userId}/reset-password`, { newPassword }),
+  
+  deleteUser: (userId: number) => apiClient.delete(`/auth/users/${userId}`),
+  
+  generatePassword: (length?: number) => {
+    const params = length ? { length } : {};
+    return apiClient.get('/auth/generate-password', { params });
+  },
 };
 
 // 学生 API
@@ -144,6 +201,7 @@ export const scoreAPI = {
   update: (id: number, data: any) => apiClient.put(`/scores/${id}`, data),
   delete: (id: number) => apiClient.delete(`/scores/${id}`),
   batchImport: (scores: any[]) => apiClient.post('/scores/batch', { scores }),
+  checkDuplicates: (records: any[]) => apiClient.post('/scores/check-duplicates', { records }),
   aiImport: (records: any[]) => apiClient.post('/scores/ai-import', { records }),
   // 违纪记录导入（包含教师检测）
   importRecords: (records: any[]) => apiClient.post('/scores/import-records', { records }),

@@ -38,8 +38,21 @@ export default defineConfig({
     {
       name: 'vite-plugin-lan-only',
       configureServer(server) {
-        // 仅在开发模式注入
+        // 仅在开发模式注入，使用 use 而不是中间件，确保在Vite默认中间件之前执行
+        server.middlewares.use('/api', (req: any, res: any, next: any) => {
+          // API请求不需要IP检查，直接通过
+          next();
+        });
+        
         server.middlewares.use((req: any, res: any, next: any) => {
+          // 跳过API请求和静态资源
+          if (req.url?.startsWith('/api/') || 
+              req.url?.includes('.') || 
+              req.url?.startsWith('/@') ||
+              req.url?.startsWith('/node_modules/')) {
+            return next();
+          }
+          
           try {
             const remote = (req.socket && req.socket.remoteAddress) || req.ip || req.headers['x-forwarded-for'];
             const ip = Array.isArray(remote) ? remote[0] : (remote || '').toString();
@@ -54,6 +67,7 @@ export default defineConfig({
             res.end('Access denied');
             return;
           }
+          // 继续处理请求，让Vite处理历史API回退
           next();
         });
       }
@@ -68,6 +82,24 @@ export default defineConfig({
         changeOrigin: true
       }
     }
+  },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: undefined
+      }
+    },
+    // 确保构建时生成正确的路径
+    outDir: 'dist',
+    // 启用source map用于调试（可选）
+    sourcemap: false,
+    // 优化构建性能
+    target: 'esnext',
+    minify: 'esbuild'
+  },
+  preview: {
+    port: 4173,
+    host: '0.0.0.0'
   }
 })
 

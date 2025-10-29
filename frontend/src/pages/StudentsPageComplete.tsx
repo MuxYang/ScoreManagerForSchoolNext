@@ -16,7 +16,6 @@ import {
   DialogContent,
   Field,
   tokens,
-  Subtitle1,
   Select,
   Checkbox,
 } from '@fluentui/react-components';
@@ -35,6 +34,7 @@ import {
 } from '@fluentui/react-icons';
 import { studentAPI, scoreAPI } from '../services/api';
 import { useNavigate } from 'react-router-dom';
+import PageTitle from '../components/PageTitle';
 
 // ==================== 样式定义 ====================
 const useStyles = makeStyles({
@@ -42,16 +42,30 @@ const useStyles = makeStyles({
     padding: '20px',
     maxWidth: '1600px',
     margin: '0 auto',
+    '@media (max-width: 768px)': {
+      padding: '12px 8px',
+      maxWidth: '100%',
+    },
   },
   header: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: '24px',
+    '@media (max-width: 768px)': {
+      flexDirection: 'column',
+      gap: '12px',
+      alignItems: 'stretch',
+      marginBottom: '16px',
+    },
   },
   actions: {
     display: 'flex',
     gap: '12px',
+    '@media (max-width: 768px)': {
+      flexDirection: 'column',
+      gap: '8px',
+    },
   },
   filterSection: {
     display: 'flex',
@@ -62,9 +76,20 @@ const useStyles = makeStyles({
     borderRadius: tokens.borderRadiusMedium,
     flexWrap: 'wrap',
     alignItems: 'flex-end',
+    '@media (max-width: 768px)': {
+      flexDirection: 'column',
+      alignItems: 'stretch',
+      gap: '8px',
+      padding: '12px',
+      marginBottom: '16px',
+    },
   },
   filterField: {
     minWidth: '150px',
+    '@media (max-width: 768px)': {
+      minWidth: 'unset',
+      width: '100%',
+    },
   },
   table: {
     width: '100%',
@@ -72,6 +97,9 @@ const useStyles = makeStyles({
     backgroundColor: tokens.colorNeutralBackground1,
     borderRadius: tokens.borderRadiusMedium,
     overflow: 'hidden',
+    '@media (max-width: 768px)': {
+      display: 'none', // 在移动端隐藏表格，使用卡片布局
+    },
   },
   tableHeader: {
     backgroundColor: tokens.colorNeutralBackground2,
@@ -84,6 +112,10 @@ const useStyles = makeStyles({
     '&:hover': {
       backgroundColor: tokens.colorNeutralBackground2Hover,
     },
+    '@media (max-width: 768px)': {
+      padding: '12px 8px',
+      fontSize: '14px',
+    },
   },
   sortableHeader: {
     display: 'flex',
@@ -93,6 +125,55 @@ const useStyles = makeStyles({
   tableCell: {
     padding: '16px',
     borderBottom: `1px solid ${tokens.colorNeutralStroke2}`,
+    '@media (max-width: 768px)': {
+      padding: '12px 8px',
+      fontSize: '14px',
+    },
+  },
+  mobileCardList: {
+    display: 'none',
+    '@media (max-width: 768px)': {
+      display: 'block',
+    },
+  },
+  mobileCard: {
+    backgroundColor: tokens.colorNeutralBackground1,
+    borderRadius: tokens.borderRadiusMedium,
+    padding: '16px',
+    marginBottom: '12px',
+    border: `1px solid ${tokens.colorNeutralStroke2}`,
+  },
+  mobileCardHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: '12px',
+  },
+  mobileCardTitle: {
+    fontWeight: 600,
+    fontSize: '16px',
+  },
+  mobileCardContent: {
+    display: 'grid',
+    gap: '8px',
+  },
+  mobileCardField: {
+    display: 'flex',
+    justifyContent: 'space-between',
+  },
+  mobileCardLabel: {
+    color: tokens.colorNeutralForeground3,
+    fontSize: '14px',
+  },
+  mobileCardValue: {
+    fontSize: '14px',
+    textAlign: 'right',
+  },
+  mobileCardActions: {
+    display: 'flex',
+    gap: '8px',
+    marginTop: '12px',
+    justifyContent: 'flex-end',
   },
   tableRow: {
     transition: 'background-color 0.2s',
@@ -110,17 +191,31 @@ const useStyles = makeStyles({
     alignItems: 'center',
     marginTop: '20px',
     padding: '16px',
+    '@media (max-width: 768px)': {
+      flexDirection: 'column',
+      gap: '12px',
+      padding: '12px',
+      textAlign: 'center',
+    },
   },
   paginationButtons: {
     display: 'flex',
     gap: '8px',
     alignItems: 'center',
+    '@media (max-width: 768px)': {
+      justifyContent: 'center',
+    },
   },
   form: {
     display: 'flex',
     flexDirection: 'column',
     gap: '16px',
     minWidth: '400px',
+    '@media (max-width: 768px)': {
+      minWidth: 'unset',
+      width: '100%',
+      gap: '12px',
+    },
   },
   scoresList: {
     maxHeight: '400px',
@@ -515,7 +610,7 @@ const StudentsPageComplete: React.FC = () => {
     <div className={styles.container}>
       {/* 头部 */}
       <div className={styles.header}>
-        <Subtitle1>学生管理</Subtitle1>
+        <PageTitle title="学生管理" subtitle="管理学生信息和积分记录" />
         <div className={styles.actions}>
           <Button
             appearance="primary"
@@ -737,6 +832,71 @@ const StudentsPageComplete: React.FC = () => {
               ))}
             </tbody>
           </table>
+
+          {/* 移动端卡片视图 */}
+          <div className={styles.mobileCardList}>
+            {paginatedStudents.map((student) => (
+              <div key={student.id} className={styles.mobileCard}>
+                <div className={styles.mobileCardHeader}>
+                  <div className={styles.mobileCardTitle}>
+                    {student.name}
+                  </div>
+                  <Checkbox
+                    checked={selectedIds.includes(student.id)}
+                    onChange={() => toggleSelect(student.id)}
+                  />
+                </div>
+                <div className={styles.mobileCardContent}>
+                  <div className={styles.mobileCardField}>
+                    <span className={styles.mobileCardLabel}>学号:</span>
+                    <span className={styles.mobileCardValue}>{student.student_id}</span>
+                  </div>
+                  <div className={styles.mobileCardField}>
+                    <span className={styles.mobileCardLabel}>班级:</span>
+                    <span className={styles.mobileCardValue}>{student.class}</span>
+                  </div>
+                  <div className={styles.mobileCardField}>
+                    <span className={styles.mobileCardLabel}>累计量化:</span>
+                    <span className={styles.mobileCardValue} style={{
+                      fontWeight: 600,
+                      color: (student.total_points || 0) >= 0
+                        ? tokens.colorPaletteGreenForeground1
+                        : tokens.colorPaletteRedForeground1
+                    }}>
+                      {student.total_points || 0}
+                    </span>
+                  </div>
+                </div>
+                <div className={styles.mobileCardActions}>
+                  <Button
+                    size="small"
+                    icon={<Info20Regular />}
+                    onClick={() => {
+                      // 未实现功能：查看学生详细信息
+                      alert('功能开发中：查看学生详细信息');
+                    }}
+                  >
+                    查看
+                  </Button>
+                  <Button
+                    size="small"
+                    icon={<Edit20Regular />}
+                    onClick={() => handleEdit(student)}
+                  >
+                    编辑
+                  </Button>
+                  <Button
+                    size="small"
+                    appearance="subtle"
+                    icon={<Delete20Regular />}
+                    onClick={() => handleDelete(student)}
+                  >
+                    删除
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
 
           {/* 分页 */}
           <div className={styles.pagination}>
