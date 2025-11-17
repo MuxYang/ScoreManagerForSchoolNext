@@ -1,6 +1,6 @@
 {
   "name": "score-manager-workspace",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "综合量化管理系统工作区",
   "private": true,
   "scripts": {
