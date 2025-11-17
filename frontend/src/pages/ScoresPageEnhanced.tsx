@@ -21,8 +21,6 @@ import {
   Select,
   makeStyles,
   Spinner,
-  MessageBar,
-  MessageBarBody,
   Tab,
   TabList,
   Card,
@@ -38,6 +36,7 @@ import { Add20Regular, Delete20Regular, Edit20Regular, Search20Regular, CloudArr
 import { scoreAPI, studentAPI, importExportAPI, userConfigAPI } from '../services/api';
 import { useMobileDetection } from '../utils/mobileDetection';
 import PageTitle from '../components/PageTitle';
+import { useToast } from '../utils/toast';
 
 const useStyles = makeStyles({
   container: {
@@ -248,15 +247,22 @@ interface ParsedScoreData {
 const ScoresPageEnhanced: React.FC = () => {
   const styles = useStyles();
   const isMobile = useMobileDetection();
+  const { showToast } = useToast();
   const [selectedTab, setSelectedTab] = useState('entry');
   const [scores, setScores] = useState<Score[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [aiDialogOpen, setAiDialogOpen] = useState(false);
+  // 拆分导入的加载状态
+  const [aiStudentImporting, setAiStudentImporting] = useState(false);
+  const [aiLectureImporting, setAiLectureImporting] = useState(false);
   const [editingScore, setEditingScore] = useState<Score | null>(null);
+  // 分开导入弹窗
+  const [aiStudentDialogOpen, setAiStudentDialogOpen] = useState(false);
+  const [aiLectureDialogOpen, setAiLectureDialogOpen] = useState(false);
+  const [lectureEdits, setLectureEdits] = useState<any[]>([]);
+  const [lectureBatchPeriod, setLectureBatchPeriod] = useState<number>(1);
   
   // AI 文本输入框引用
   const aiTextAreaRef = useRef<HTMLTextAreaElement>(null);
@@ -348,12 +354,12 @@ const ScoresPageEnhanced: React.FC = () => {
 
   const loadScores = async (filters?: any) => {
     setLoading(true);
-    setError('');
+    
     try {
       const response = await scoreAPI.getAll(filters);
       setScores(response.data);
     } catch (err: any) {
-      setError(err.response?.data?.error || '加载量化记录失败');
+      showToast({ title: '错误', body: err.response?.data?.error || '加载量化记录失败', intent: 'error' });
     } finally {
       setLoading(false);
     }
@@ -364,7 +370,7 @@ const ScoresPageEnhanced: React.FC = () => {
       const response = await studentAPI.getAll();
       setStudents(response.data);
     } catch (err: any) {
-      setError(err.response?.data?.error || '加载学生列表失败');
+      showToast({ title: '错误', body: err.response?.data?.error || '加载学生列表失败', intent: 'error' });
     }
   };
 
@@ -373,7 +379,7 @@ const ScoresPageEnhanced: React.FC = () => {
       const response = await scoreAPI.getStatistics(studentId);
       setStatistics(response.data);
     } catch (err: any) {
-      setError(err.response?.data?.error || '加载统计数据失败');
+      showToast({ title: '错误', body: err.response?.data?.error || '加载统计数据失败', intent: 'error' });
     }
   };
 
@@ -487,7 +493,7 @@ const ScoresPageEnhanced: React.FC = () => {
     }
 
     setAiParsing(true);
-    setError('');
+    
     setAiStreamingText('');
     setParsedData([]);
 
@@ -730,7 +736,7 @@ const ScoresPageEnhanced: React.FC = () => {
         ? `AI 成功解析：${messages.join('，')}` 
         : 'AI 解析完成，但未识别到有效记录';
       
-      setSuccess(successMsg);
+      showToast({ title: '成功', body: successMsg, intent: 'success' });
       setParsedData(parsed);
       setParsedLectureRecords(lectureRecords);
     } catch (err: any) {
@@ -766,7 +772,7 @@ const ScoresPageEnhanced: React.FC = () => {
         apiKey: aiApiKey, 
         model: aiModel 
       });
-      setSuccess('✅ AI 配置已保存（已加密存储到 Cookie 和本地）');
+      showToast({ title: '成功', body: '✅ AI 配置已保存（已加密存储到 Cookie 和本地）', intent: 'success' });
       console.log('✅ AI配置已保存到Cookie', { 
         hasApiUrl: !!aiApiUrl, 
         hasApiKey: !!aiApiKey, 
@@ -775,10 +781,17 @@ const ScoresPageEnhanced: React.FC = () => {
     } catch (err: any) {
       // 即使后端失败，也不影响本地保存
       console.warn('⚠️ Cookie保存失败，仅保存到localStorage', err);
-      setSuccess('⚠️ AI 配置已保存（仅本地），Cookie保存失败');
+      showToast({ title: '成功', body: '⚠️ AI 配置已保存（仅本地），Cookie保存失败', intent: 'success' });
     }
 
     setAiConfigOpen(false);
+    
+    // 修复：AI配置保存后，延迟聚焦到AI输入框
+    setTimeout(() => {
+      if (aiTextAreaRef.current && aiDialogOpen) {
+        aiTextAreaRef.current.focus();
+      }
+    }, 300); // 延迟300ms确保对话框动画完成
   };
 
   // 获取可用模型列表
@@ -789,7 +802,7 @@ const ScoresPageEnhanced: React.FC = () => {
     }
 
     setFetchingModels(true);
-    setError('');
+    
 
     try {
       // 将 chat/completions 替换为 models 端点
@@ -828,7 +841,7 @@ const ScoresPageEnhanced: React.FC = () => {
           .sort();
         
         setAvailableModels(models);
-        setSuccess(`成功获取 ${models.length} 个可用模型（从 ${data.data.length} 个模型中筛选）`);
+        showToast({ title: "成功", body: `成功获取 ${models.length} 个可用模型（从 ${data.data.length} 个模型中筛选）`, intent: "success" });
         
         // 如果当前选择的模型不在列表中，选择第一个
         if (models.length > 0 && !models.includes(aiModel)) {
@@ -888,7 +901,7 @@ const ScoresPageEnhanced: React.FC = () => {
 
       const worksheet = workbook.worksheets[0];
       if (!worksheet) {
-        setError('Excel文件为空');
+        showToast({ title: '错误', body: 'Excel文件为空', intent: 'error' });
         return;
       }
 
@@ -912,7 +925,7 @@ const ScoresPageEnhanced: React.FC = () => {
       });
       setExcelPreview(preview);
     } catch (err: any) {
-      setError('读取Excel文件失败: ' + err.message);
+      showToast({ title: '错误', body: '读取Excel文件失败: ' + err.message, intent: 'error' });
     }
   };
 
@@ -971,7 +984,7 @@ const ScoresPageEnhanced: React.FC = () => {
 
   const handleExcelImport = async () => {
     if (!excelFile || !excelMapping.name || !excelMapping.reason) {
-      setError('请完成必填字段映射');
+      showToast({ title: '错误', body: '请完成必填字段映射', intent: 'error' });
       return;
     }
 
@@ -1036,12 +1049,12 @@ const ScoresPageEnhanced: React.FC = () => {
         setTeacherDialogOpen(true);
         setExcelImportOpen(false);
       } else {
-        setSuccess(`导入完成！成功 ${successCount} 条，待处理 ${pendingCount} 条，失败 ${errorCount} 条`);
+        showToast({ title: "成功", body: `导入完成！成功 ${successCount} 条，待处理 ${pendingCount} 条，失败 ${errorCount} 条`, intent: "success" });
         setExcelImportOpen(false);
         loadScores();
       }
     } catch (err: any) {
-      setError(err.response?.data?.error || '导入失败');
+      showToast({ title: '错误', body: err.response?.data?.error || '导入失败', intent: 'error' });
     } finally {
       setExcelImporting(false);
     }
@@ -1059,12 +1072,12 @@ const ScoresPageEnhanced: React.FC = () => {
       const records = Array.from(selectedTeacherRecords).map(index => teacherRecords[index]);
       await scoreAPI.processTeacherRecords(records, action);
       
-      setSuccess(`已${action === 'discard' ? '舍弃' : '导入'} ${records.length} 条记录`);
+      showToast({ title: "成功", body: `已${action === 'discard' ? '舍弃' : '导入'} ${records.length} 条记录`, intent: "success" });
       setTeacherDialogOpen(false);
       setSelectedTeacherRecords(new Set());
       loadScores();
     } catch (err: any) {
-      setError(err.response?.data?.error || '处理失败');
+      showToast({ title: '错误', body: err.response?.data?.error || '处理失败', intent: 'error' });
     } finally {
       setExcelImporting(false);
     }
@@ -1128,7 +1141,7 @@ const ScoresPageEnhanced: React.FC = () => {
       });
 
       setParsedData(parsed);
-      setSuccess(`成功解析 ${parsed.length} 条数据`);
+      showToast({ title: "成功", body: `成功解析 ${parsed.length} 条数据`, intent: "success" });
     } catch (err: any) {
       console.error('重新解析失败:', err);
       showAiError('解析失败：' + (err.message || '请检查JSON格式是否正确'), 'parse', textToRetry);
@@ -1140,65 +1153,123 @@ const ScoresPageEnhanced: React.FC = () => {
     setAiErrorDialogOpen(false);
     setAiErrorText('');
     setAiErrorMessage('');
-    setError('已舍弃解析结果');
-    setTimeout(() => setError(''), 3000);
+    showToast({ title: '错误', body: '已舍弃解析结果', intent: 'error' });
+    
   };
 
-  // 检查重复记录
-  const checkForDuplicates = async (records: any[]) => {
+  // // 检查重复记录
+  // const checkForDuplicates = async (records: any[]) => {
+  //   try {
+  //     const response = await scoreAPI.checkDuplicates(records);
+  //     return response.data;
+  //   } catch (err: any) {
+  //     console.error('检查重复记录失败:', err);
+  //     return { hasDuplicates: false, duplicates: [] };
+  //   }
+  // };
+
+  // 仅导入学生量化记录
+  const importStudentsFromParsed = async () => {
+    if (parsedData.length === 0) return;
+    setAiStudentImporting(true);
     try {
-      const response = await scoreAPI.checkDuplicates(records);
-      return response.data;
+      const records = parsedData.map(item => ({
+        name: (item as any).studentName,
+        className: (item as any).class,
+        teacherName: (item as any).teacherName,
+        subject: (item as any).subject || '',
+        others: (item as any).others || '',
+        points: (item as any).points,
+        reason: (item as any).reason,
+        date: new Date().toISOString().split('T')[0],
+      }));
+
+      const response = await scoreAPI.aiImport(records);
+      const { successCount, pendingCount, errorCount } = response.data;
+      setImportSummary({
+        studentTotal: parsedData.length,
+        studentSuccess: successCount,
+        studentFailed: errorCount,
+        studentPending: pendingCount,
+        lectureTotal: 0,
+        lectureSuccess: 0,
+        lectureFailed: 0
+      });
+      setImportSummaryOpen(true);
+      setParsedData([]);
+      loadScores();
     } catch (err: any) {
-      console.error('检查重复记录失败:', err);
-      return { hasDuplicates: false, duplicates: [] };
+      showAiError(err.response?.data?.error || '学生量化导入失败', 'import');
+    } finally {
+      setAiStudentImporting(false);
     }
   };
 
-  // 批量导入AI解析的数据（支持学生和教师记录）
-  const handleAiBatchImport = async () => {
-    if (parsedData.length === 0 && parsedLectureRecords.length === 0) {
+  // 仅导入教师听课记录
+  const importLecturesFromParsed = async () => {
+    if (parsedLectureRecords.length === 0) return;
+    setAiLectureImporting(true);
+    try {
+      const { lectureRecordsAPI } = await import('../services/api');
+      const payload = (lectureEdits.length > 0 ? lectureEdits : parsedLectureRecords).map((r: any) => ({
+        teacherName: r.teacherName,
+        teachName: r.teachName,
+        class: r.class,
+        notes: r.others || r.notes || '',
+        period: Math.min(13, Math.max(1, Number(lectureBatchPeriod) || 1)),
+        date: r.date || new Date().toISOString().split('T')[0],
+      }));
+      const response = await lectureRecordsAPI.batchCreate(payload);
+      setImportSummary({
+        studentTotal: 0,
+        studentSuccess: 0,
+        studentFailed: 0,
+        studentPending: 0,
+        lectureTotal: payload.length,
+        lectureSuccess: response.data.successCount,
+        lectureFailed: response.data.failedCount
+      });
+      setImportSummaryOpen(true);
+      setParsedLectureRecords([]);
+      setLectureEdits([]);
+      setAiLectureDialogOpen(false);
+    } catch (err: any) {
+      showAiError(err.response?.data?.error || '教师听课导入失败', 'import');
+    } finally {
+      setAiLectureImporting(false);
+    }
+  };
+
+  // 开启"分开导入"流程
+  const openSplitImportFlow = () => {
+    if (parsedData.length > 0) {
+      setAiStudentDialogOpen(true);
+    } else if (parsedLectureRecords.length > 0) {
+      // 初始化 lectureEdits 并打开听课弹窗
+      const initial = parsedLectureRecords.map((r: any) => ({ ...r }));
+      setLectureEdits(initial);
+      setLectureBatchPeriod(1);
+      setAiLectureDialogOpen(true);
+    } else {
+      // 都没有则使用已有错误框提示
       showAiError('没有可导入的数据', 'import');
-      return;
-    }
-
-    setAiImporting(true);
-    setError('');
-
-    try {
-      // 1. 检查学生量化记录的重复
-      if (parsedData.length > 0) {
-        const records = parsedData.map(item => ({
-          name: item.studentName,
-          className: item.class,
-          teacherName: item.teacherName,
-          subject: item.subject || '',
-          others: item.others || '',
-          points: item.points,
-          reason: item.reason,
-          date: new Date().toISOString().split('T')[0],
-        }));
-
-        const duplicateCheck = await checkForDuplicates(records);
-        
-        if (duplicateCheck.hasDuplicates) {
-          // 发现重复记录，显示确认对话框
-          setDuplicateRecords(duplicateCheck.duplicates);
-          setPendingImportRecords(records);
-          setDuplicateCheckOpen(true);
-          setAiImporting(false);
-          return;
-        }
-      }
-
-      // 2. 没有重复记录，直接导入
-      await performActualImport();
-      
-    } catch (err: any) {
-      showAiError(err.response?.data?.error || 'AI导入失败', 'import');
-      setAiImporting(false);
     }
   };
+
+  // 解析完成后自动进入分步导入流程
+  const splitFlowStartedRef = useRef(false);
+  useEffect(() => {
+    if (!aiDialogOpen) return;
+    if (aiParsing) return;
+    if (splitFlowStartedRef.current) return;
+    if (parsedData.length > 0 || parsedLectureRecords.length > 0) {
+      splitFlowStartedRef.current = true;
+      setAiDialogOpen(false);
+      openSplitImportFlow();
+      // 重置标志：当两个分步弹窗都关闭且数据清空后，允许下次再触发
+      setTimeout(() => { splitFlowStartedRef.current = false; }, 0);
+    }
+  }, [aiDialogOpen, aiParsing, parsedData.length, parsedLectureRecords.length]);
 
   // 执行实际的导入操作
   const performActualImport = async () => {
@@ -1276,22 +1347,51 @@ const ScoresPageEnhanced: React.FC = () => {
     setAiImporting(false);
   };
 
-  // 导出量化数据
+  // 导出日期范围状态
+  const [exportStartDate, setExportStartDate] = useState('');
+  const [exportEndDate, setExportEndDate] = useState('');
+  const [showExportDialog, setShowExportDialog] = useState(false);
+
+  // 导出量化数据（支持日期范围）
   const handleExportScores = async () => {
     try {
-      const response = await importExportAPI.exportScoresExcel();
+      // 构建查询参数
+      const params: any = {};
+      if (exportStartDate) params.startDate = exportStartDate;
+      if (exportEndDate) params.endDate = exportEndDate;
+      
+      const response = await importExportAPI.exportScoresExcel(params);
       const blob = new Blob([response.data], { 
         type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
       });
-      const url = window.URL.createObjectURL(blob);
+      const downloadUrl = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
-      link.href = url;
-      link.download = `量化记录_${new Date().toISOString().split('T')[0]}.xlsx`;
+      link.href = downloadUrl;
+      
+      // 生成文件名
+      let filename = '学生量化记录';
+      if (exportStartDate && exportEndDate) {
+        filename += `_${exportStartDate}_至_${exportEndDate}`;
+      } else if (exportStartDate) {
+        filename += `_${exportStartDate}_之后`;
+      } else if (exportEndDate) {
+        filename += `_${exportEndDate}_之前`;
+      } else {
+        filename += `_全部`;
+      }
+      filename += '.xlsx';
+      
+      link.download = filename;
       link.click();
-      window.URL.revokeObjectURL(url);
-      setSuccess('导出成功！');
+      window.URL.revokeObjectURL(downloadUrl);
+      showToast({ title: '成功', body: '导出成功！', intent: 'success' });
+      setShowExportDialog(false);
+      
+      // 清空日期选择
+      setExportStartDate('');
+      setExportEndDate('');
     } catch (err: any) {
-      setError(err.response?.data?.error || '导出失败');
+      showToast({ title: '错误', body: err.response?.data?.error || '导出失败', intent: 'error' });
     }
   };
 
@@ -1325,11 +1425,11 @@ const ScoresPageEnhanced: React.FC = () => {
   };
 
   const handleSubmit = async () => {
-    setError('');
-    setSuccess('');
+    
+    
 
     if (!formData.studentId || !formData.points || !formData.reason) {
-      setError('请填写所有必填字段');
+      showToast({ title: '错误', body: '请填写所有必填字段', intent: 'error' });
       return;
     }
 
@@ -1344,15 +1444,15 @@ const ScoresPageEnhanced: React.FC = () => {
     try {
       if (editingScore) {
         await scoreAPI.update(editingScore.id, data);
-        setSuccess('量化记录更新成功');
+        showToast({ title: '成功', body: '量化记录更新成功', intent: 'success' });
       } else {
         await scoreAPI.create(data);
-        setSuccess('量化记录添加成功');
+        showToast({ title: '成功', body: '量化记录添加成功', intent: 'success' });
       }
       setDialogOpen(false);
       loadScores();
     } catch (err: any) {
-      setError(err.response?.data?.error || '操作失败');
+      showToast({ title: '错误', body: err.response?.data?.error || '操作失败', intent: 'error' });
     }
   };
 
@@ -1363,10 +1463,10 @@ const ScoresPageEnhanced: React.FC = () => {
 
     try {
       await scoreAPI.delete(id);
-      setSuccess('量化记录删除成功');
+      showToast({ title: '成功', body: '量化记录删除成功', intent: 'success' });
       loadScores();
     } catch (err: any) {
-      setError(err.response?.data?.error || '删除失败');
+      showToast({ title: '错误', body: err.response?.data?.error || '删除失败', intent: 'error' });
     }
   };
 
@@ -1492,7 +1592,7 @@ const ScoresPageEnhanced: React.FC = () => {
           <Button
             appearance="subtle"
             icon={<ArrowDownload20Regular />}
-            onClick={handleExportScores}
+            onClick={() => setShowExportDialog(true)}
           >
             导出数据
           </Button>
@@ -1521,18 +1621,6 @@ const ScoresPageEnhanced: React.FC = () => {
           </Button>
         </div>
       </div>
-
-      {error && (
-        <MessageBar intent="error" style={{ marginBottom: '16px' }}>
-          <MessageBarBody>{error}</MessageBarBody>
-        </MessageBar>
-      )}
-
-      {success && (
-        <MessageBar intent="success" style={{ marginBottom: '16px' }}>
-          <MessageBarBody>{success}</MessageBarBody>
-        </MessageBar>
-      )}
 
       <TabList
         selectedValue={selectedTab}
@@ -1828,6 +1916,142 @@ const ScoresPageEnhanced: React.FC = () => {
         </DialogSurface>
       </Dialog>
 
+      {/* 导出对话框 - 支持日期范围选择 */}
+      <Dialog open={showExportDialog} onOpenChange={(_, data) => setShowExportDialog(data.open)}>
+        <DialogSurface>
+          <DialogBody>
+            <DialogTitle>导出学生量化记录</DialogTitle>
+            <DialogContent>
+              <div className={styles.form}>
+                <div>
+                  <Label>开始日期（可选）</Label>
+                  <Input
+                    type="date"
+                    value={exportStartDate}
+                    onChange={(e) => setExportStartDate(e.target.value)}
+                    placeholder="留空表示不限制"
+                  />
+                </div>
+                <div>
+                  <Label>结束日期（可选）</Label>
+                  <Input
+                    type="date"
+                    value={exportEndDate}
+                    onChange={(e) => setExportEndDate(e.target.value)}
+                    placeholder="留空表示不限制"
+                  />
+                </div>
+                <div style={{ marginTop: '12px', color: tokens.colorNeutralForeground3 }}>
+                  {exportStartDate || exportEndDate
+                    ? `将导出${exportStartDate ? exportStartDate : '最早'}到${exportEndDate ? exportEndDate : '最新'}的记录`
+                    : '将导出所有量化记录'}
+                </div>
+              </div>
+            </DialogContent>
+            <DialogActions>
+              <DialogTrigger disableButtonEnhancement>
+                <Button appearance="secondary">取消</Button>
+              </DialogTrigger>
+              <Button appearance="primary" onClick={handleExportScores}>
+                导出 Excel
+              </Button>
+            </DialogActions>
+          </DialogBody>
+        </DialogSurface>
+      </Dialog>
+
+      {/* 分开导入 - 学生量化对话框 */}
+      <Dialog open={aiStudentDialogOpen} onOpenChange={(_, data) => setAiStudentDialogOpen(data.open)}>
+        <DialogSurface>
+          <DialogBody>
+            <DialogTitle>分开导入 - 学生量化</DialogTitle>
+            <DialogContent>
+              <div style={{ marginBottom: '12px' }}>共 {parsedData.length} 条学生量化记录。</div>
+            </DialogContent>
+            <DialogActions>
+              <DialogTrigger disableButtonEnhancement>
+                <Button appearance="secondary">取消</Button>
+              </DialogTrigger>
+              <Button
+                appearance="primary"
+                onClick={async () => {
+                  await importStudentsFromParsed();
+                  setAiStudentDialogOpen(false);
+                  if (parsedLectureRecords.length > 0) {
+                    const initial = parsedLectureRecords.map((r: any) => ({ ...r }));
+                    setLectureEdits(initial);
+                    setLectureBatchPeriod(1);
+                    setAiLectureDialogOpen(true);
+                  }
+                }}
+                disabled={aiStudentImporting || parsedData.length === 0}
+              >
+                {aiStudentImporting ? '学生导入中...' : `导入学生 (${parsedData.length} 条)`}
+              </Button>
+            </DialogActions>
+          </DialogBody>
+        </DialogSurface>
+      </Dialog>
+
+      {/* 分开导入 - 教师听课对话框（批量选择节数） */}
+      <Dialog open={aiLectureDialogOpen} onOpenChange={(_, data) => setAiLectureDialogOpen(data.open)}>
+        <DialogSurface>
+          <DialogBody>
+            <DialogTitle>分开导入 - 教师听课（请确认批量节数）</DialogTitle>
+            <DialogContent>
+              <div style={{ marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <span>批量节数(1-13)：</span>
+                <Input
+                  type="number"
+                  min={1}
+                  max={13}
+                  value={String(lectureBatchPeriod)}
+                  onChange={(e) => setLectureBatchPeriod(Math.min(13, Math.max(1, Number(e.target.value) || 1)))}
+                  style={{ width: '100px' }}
+                />
+              </div>
+              <Card style={{ maxHeight: '50vh', overflow: 'auto', padding: 0 }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr>
+                      <th style={{ padding: '8px', textAlign: 'left' }}>#</th>
+                      <th style={{ padding: '8px', textAlign: 'left' }}>听课教师</th>
+                      <th style={{ padding: '8px', textAlign: 'left' }}>授课教师</th>
+                      <th style={{ padding: '8px', textAlign: 'left' }}>班级</th>
+                      <th style={{ padding: '8px', textAlign: 'left' }}>节数(批量)</th>
+                      <th style={{ padding: '8px', textAlign: 'left' }}>备注</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {lectureEdits.map((item: any, index: number) => (
+                      <tr key={index} style={{ borderBottom: '1px solid #eee' }}>
+                        <td style={{ padding: '8px' }}>{index + 1}</td>
+                        <td style={{ padding: '8px' }}>{item.teacherName || '-'}</td>
+                        <td style={{ padding: '8px' }}>{item.teachName || '-'}</td>
+                        <td style={{ padding: '8px' }}>{item.class || '-'}</td>
+                        <td style={{ padding: '8px' }}>{lectureBatchPeriod}</td>
+                        <td style={{ padding: '8px', fontSize: '12px' }}>{item.others || '-'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </Card>
+            </DialogContent>
+            <DialogActions>
+              <DialogTrigger disableButtonEnhancement>
+                <Button appearance="secondary">取消</Button>
+              </DialogTrigger>
+              <Button
+                appearance="primary"
+                onClick={importLecturesFromParsed}
+                disabled={aiLectureImporting || lectureEdits.length === 0}
+              >
+                {aiLectureImporting ? '听课导入中...' : `导入听课 (${lectureEdits.length} 条)`}
+              </Button>
+            </DialogActions>
+          </DialogBody>
+        </DialogSurface>
+      </Dialog>
       {/* AI 批量导入对话框 */}
       <Dialog 
         open={aiDialogOpen} 
@@ -2087,15 +2311,8 @@ const ScoresPageEnhanced: React.FC = () => {
                     {aiParsing ? 'AI 解析中...' : '🤖 开始 AI 解析'}
                   </Button>
                 ) : (
-                  <Button 
-                    appearance="primary" 
-                    size="large"
-                    icon={aiImporting ? <Spinner size="tiny" /> : undefined}
-                    onClick={handleAiBatchImport}
-                    disabled={aiImporting}
-                    style={{ minWidth: '180px' }}
-                  >
-                    {aiImporting ? '导入中...' : `✓ 确认导入 (${parsedData.length + parsedLectureRecords.length} 条)`}
+                  <Button appearance="primary" size="large" disabled>
+                    正在进入分步导入...
                   </Button>
                 )}
               </div>
@@ -2115,11 +2332,9 @@ const ScoresPageEnhanced: React.FC = () => {
               {aiErrorType === 'general' && '❌ AI 操作错误'}
             </DialogTitle>
             <DialogContent className={styles.aiErrorContent} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              <MessageBar intent="error">
-                <MessageBarBody>
+              <div style={{ padding: "12px", backgroundColor: "var(--colorPaletteRedBackground2)", borderRadius: "4px", marginBottom: "16px" }}>
                   <strong>错误信息：</strong>{aiErrorMessage}
-                </MessageBarBody>
-              </MessageBar>
+                </div>
               
               {aiErrorType === 'parse' && aiErrorText && (
                 <div>
@@ -2146,27 +2361,21 @@ const ScoresPageEnhanced: React.FC = () => {
               )}
 
               {aiErrorType === 'parse' && (
-                <MessageBar intent="info">
-                  <MessageBarBody>
+                <div style={{ padding: "12px", backgroundColor: "var(--colorNeutralBackground3)", borderRadius: "4px", marginTop: "12px" }}>
                     💡 提示：请确保文本为有效的 JSON 数组格式，例如：[{"{"}studentName":"张三","class":"高一1班","reason":"迟到","teacherName":"李老师","subject":"数学","others":""{"}"}]
-                  </MessageBarBody>
-                </MessageBar>
+                  </div>
               )}
 
               {aiErrorType === 'config' && (
-                <MessageBar intent="info">
-                  <MessageBarBody>
+                <div style={{ padding: "12px", backgroundColor: "var(--colorNeutralBackground3)", borderRadius: "4px", marginTop: "12px" }}>
                     💡 提示：请点击"AI 配置"按钮重新配置 API 地址和密钥，或检查网络连接。
-                  </MessageBarBody>
-                </MessageBar>
+                  </div>
               )}
 
               {aiErrorType === 'import' && (
-                <MessageBar intent="info">
-                  <MessageBarBody>
+                <div style={{ padding: "12px", backgroundColor: "var(--colorNeutralBackground3)", borderRadius: "4px", marginTop: "12px" }}>
                     💡 提示：导入失败可能是由于数据格式问题或网络错误，请检查数据格式后重试。
-                  </MessageBarBody>
-                </MessageBar>
+                  </div>
               )}
             </DialogContent>
             
@@ -2282,37 +2491,29 @@ const ScoresPageEnhanced: React.FC = () => {
                       </Button>
                     </div>
                     
-                    {availableModels.length > 0 ? (
-                      <Select
-                        value={aiModel}
-                        onChange={(_, data) => setAiModel(data.value)}
-                        style={{ 
-                          width: '100%',
-                          height: '40px',
-                          fontSize: '14px'
-                        }}
-                      >
-                        {availableModels.map(model => (
-                          <option key={model} value={model}>{model}</option>
-                        ))}
-                      </Select>
-                    ) : (
-                      <Select
-                        value={aiModel}
-                        onChange={(_, data) => setAiModel(data.value)}
-                        style={{ 
-                          width: '100%',
-                          height: '40px',
-                          fontSize: '14px'
-                        }}
-                      >
-                        <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
-                        <option value="gpt-4">GPT-4</option>
-                        <option value="gpt-4-turbo-preview">GPT-4 Turbo</option>
-                        <option value="gpt-4o">GPT-4o</option>
-                        <option value="gpt-4o-mini">GPT-4o Mini</option>
-                      </Select>
-                    )}
+                    <Combobox
+                      value={aiModel}
+                      selectedOptions={[aiModel]}
+                      onOptionSelect={(_, data) => setAiModel(data.optionValue || '')}
+                      placeholder="选择模型"
+                      style={{ 
+                        width: '100%',
+                      }}
+                    >
+                      {availableModels.length > 0 ? (
+                        availableModels.map(model => (
+                          <Option key={model} value={model}>{model}</Option>
+                        ))
+                      ) : (
+                        <>
+                          <Option value="gpt-3.5-turbo">GPT-3.5 Turbo</Option>
+                          <Option value="gpt-4">GPT-4</Option>
+                          <Option value="gpt-4-turbo-preview">GPT-4 Turbo</Option>
+                          <Option value="gpt-4o">GPT-4o</Option>
+                          <Option value="gpt-4o-mini">GPT-4o Mini</Option>
+                        </>
+                      )}
+                    </Combobox>
                     <div style={{ fontSize: '12px', color: tokens.colorNeutralForeground2, marginTop: '6px' }}>
                       {availableModels.length > 0 
                         ? `已获取 ${availableModels.length} 个可用模型`
@@ -2321,11 +2522,9 @@ const ScoresPageEnhanced: React.FC = () => {
                   </div>
                 )}
 
-                <MessageBar intent="info">
-                  <MessageBarBody>
+                <div style={{ padding: "12px", backgroundColor: "var(--colorNeutralBackground3)", borderRadius: "4px", marginTop: "12px" }}>
                     💡 配置信息将保存在本地浏览器，不会上传到服务器
-                  </MessageBarBody>
-                </MessageBar>
+                  </div>
               </div>
             </DialogContent>
             <DialogActions className={styles.aiConfigActions}>
@@ -2479,11 +2678,9 @@ const ScoresPageEnhanced: React.FC = () => {
           <DialogBody>
             <DialogTitle>检测到教师记录 - 请选择处理方式</DialogTitle>
             <DialogContent style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              <MessageBar intent="warning">
-                <MessageBarBody>
+              <div style={{ padding: "12px", backgroundColor: "var(--colorPaletteYellowBackground2)", borderRadius: "4px", marginBottom: "16px" }}>
                   检测到 {teacherRecords.length} 条教师姓名记录，请选择要处理的记录并决定处理方式
-                </MessageBarBody>
-              </MessageBar>
+                </div>
 
               <Card style={{ maxHeight: '400px', overflow: 'auto' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
@@ -2586,12 +2783,10 @@ const ScoresPageEnhanced: React.FC = () => {
           <DialogBody>
             <DialogTitle>⚠️ 发现重复记录</DialogTitle>
             <DialogContent>
-              <MessageBar intent="warning" style={{ marginBottom: '16px' }}>
-                <MessageBarBody>
+              <div style={{ padding: "12px", backgroundColor: "var(--colorPaletteYellowBackground2)", borderRadius: "4px", marginBottom: "16px" }}>
                   检测到 {duplicateRecords.length} 条记录与当天已存在的记录重复（相同学生、相同教师、相同原因）。
                   是否确认继续导入？
-                </MessageBarBody>
-              </MessageBar>
+                </div>
               
               <div style={{ maxHeight: '400px', overflow: 'auto' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
@@ -2723,11 +2918,9 @@ const ScoresPageEnhanced: React.FC = () => {
 
               {/* 提示信息 */}
               {importSummary.studentPending > 0 && (
-                <MessageBar intent="warning">
-                  <MessageBarBody>
+                <div style={{ padding: "12px", backgroundColor: "var(--colorPaletteYellowBackground2)", borderRadius: "4px", marginBottom: "16px" }}>
                     💡 有 {importSummary.studentPending} 条学生记录需要手动处理，请前往"待处理记录"页面。
-                  </MessageBarBody>
-                </MessageBar>
+                  </div>
               )}
             </DialogContent>
             <DialogActions>

@@ -197,7 +197,7 @@ router.post('/export-records', authenticateToken, async (req: Request, res: Resp
 
     logger.info('Export student quantification records', { startDate, endDate });
 
-    // 获取指定时间范围内有量化记录的学生及其记录
+    // 获取指定时间范围内有量化记录的学生及其记录（排除占位记录）
     const records = db.prepare(`
       SELECT 
         st.class,
@@ -209,7 +209,7 @@ router.post('/export-records', authenticateToken, async (req: Request, res: Resp
         s.teacher_name
       FROM scores s
       INNER JOIN students st ON s.student_id = st.id
-      WHERE s.date BETWEEN ? AND ?
+      WHERE s.date BETWEEN ? AND ? AND s.date != '1970-01-01'
       ORDER BY st.class, st.name, s.date
     `).all(startDate, endDate) as any[];
 

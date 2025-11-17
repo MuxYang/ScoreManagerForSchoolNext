@@ -10,13 +10,13 @@ const router = express.Router();
 // 获取所有教师（按科目分组，包含积分统计）
 router.get('/', authenticateToken, (_req: Request, res: Response) => {
   try {
-    // 获取所有教师及其积分总和
+    // 获取所有教师及其量化记录数量（由积分加和改为计数，排除占位记录）
     const teachers = db.prepare(`
       SELECT 
         t.*,
-        COALESCE(SUM(s.points), 0) as total_points
+        COALESCE(COUNT(s.id), 0) as total_points
       FROM teachers t
-      LEFT JOIN scores s ON t.name = s.teacher_name
+      LEFT JOIN scores s ON t.name = s.teacher_name AND s.date != '1970-01-01'
       GROUP BY t.id
       ORDER BY t.subject, t.name
     `).all();
@@ -203,7 +203,7 @@ router.post('/export-records', authenticateToken, async (req: Request, res: Resp
       ORDER BY subject, name
     `).all() as { id: number; name: string; subject: string }[];
 
-    // 获取指定时间范围内的量化记录
+    // 获取指定时间范围内的量化记录（排除占位记录）
     const records = db.prepare(`
       SELECT 
         s.teacher_name,
@@ -213,7 +213,7 @@ router.post('/export-records', authenticateToken, async (req: Request, res: Resp
         st.name as student_name
       FROM scores s
       LEFT JOIN students st ON s.student_id = st.id
-      WHERE s.date BETWEEN ? AND ?
+      WHERE s.date BETWEEN ? AND ? AND s.date != '1970-01-01'
       ORDER BY s.teacher_name, s.date
     `).all(startDate, endDate) as any[];
 

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { authAPI } from '../services/api';
+import { useToast } from '../utils/toast';
 import {
   Card,
   Input,
@@ -9,8 +10,6 @@ import {
   Label,
   Title1,
   Body1,
-  MessageBar,
-  MessageBarBody,
   makeStyles,
   tokens,
 } from '@fluentui/react-components';
@@ -79,6 +78,7 @@ const useStyles = makeStyles({
 });
 
 const FirstLoginSetupPage: React.FC = () => {
+  const { showToast } = useToast();
   const styles = useStyles();
   const navigate = useNavigate();
   const { user, logout } = useAuth();
@@ -87,21 +87,18 @@ const FirstLoginSetupPage: React.FC = () => {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [securityQuestion, setSecurityQuestion] = useState('');
   const [securityAnswer, setSecurityAnswer] = useState('');
-  const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
-
     // 验证
     if (!newPassword || !confirmPassword || !securityQuestion || !securityAnswer) {
-      setError('请填写所有字段');
+      showToast({ title: '错误', body: '请填写所有字段', intent: 'error' });
       return;
     }
 
     if (newPassword.length < 8) {
-      setError('密码长度至少为8位');
+      showToast({ title: '错误', body: '密码长度至少为8位', intent: 'error' });
       return;
     }
 
@@ -112,33 +109,33 @@ const FirstLoginSetupPage: React.FC = () => {
     const hasSymbol = /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(newPassword);
 
     if (!hasUpperCase || !hasLowerCase) {
-      setError('密码必须包含大写字母和小写字母');
+      showToast({ title: '错误', body: '密码必须包含大写字母和小写字母', intent: 'error' });
       return;
     }
 
     if (!hasNumber && !hasSymbol) {
-      setError('密码必须包含数字或符号');
+      showToast({ title: '错误', body: '密码必须包含数字或符号', intent: 'error' });
       return;
     }
 
     const typeCount = [hasUpperCase, hasLowerCase, hasNumber, hasSymbol].filter(Boolean).length;
     if (typeCount < 3) {
-      setError('密码必须包含大写字母、小写字母、数字、符号中的至少三种');
+      showToast({ title: '错误', body: '密码必须包含大写字母、小写字母、数字、符号中的至少三种', intent: 'error' });
       return;
     }
 
     if (newPassword !== confirmPassword) {
-      setError('两次输入的密码不一致');
+      showToast({ title: '错误', body: '两次输入的密码不一致', intent: 'error' });
       return;
     }
 
     if (securityQuestion.trim().length < 5) {
-      setError('密保问题至少需要5个字符');
+      showToast({ title: '错误', body: '密保问题至少需要5个字符', intent: 'error' });
       return;
     }
 
     if (securityAnswer.trim().length < 2) {
-      setError('密保答案至少需要2个字符');
+      showToast({ title: '错误', body: '密保答案至少需要2个字符', intent: 'error' });
       return;
     }
 
@@ -156,7 +153,7 @@ const FirstLoginSetupPage: React.FC = () => {
       logout();
       navigate('/login');
     } catch (err: any) {
-      setError(err.response?.data?.error || '设置失败，请重试');
+      showToast({ title: '错误', body: err.response?.data?.error || '设置失败，请重试', intent: 'error' });
     } finally {
       setLoading(false);
     }
@@ -185,12 +182,6 @@ const FirstLoginSetupPage: React.FC = () => {
             <li>完成设置后将自动退出，请使用新密码登录</li>
           </ul>
         </div>
-
-        {error && (
-          <MessageBar intent="error">
-            <MessageBarBody>{error}</MessageBarBody>
-          </MessageBar>
-        )}
 
         <form onSubmit={handleSubmit} className={styles.form}>
           <div className={styles.field}>

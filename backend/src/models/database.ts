@@ -81,6 +81,18 @@ export function initializeDatabase() {
   }
 
   try {
+    db.exec(`ALTER TABLE teachers ADD COLUMN employee_number TEXT`);
+  } catch (err) {
+    // 字段已存在，忽略错误
+  }
+
+  try {
+    db.exec(`ALTER TABLE teachers ADD COLUMN employee_number TEXT`);
+  } catch (err) {
+    // 字段已存在，忽略错误
+  }
+
+  try {
     db.exec(`ALTER TABLE teachers ADD COLUMN teaching_classes TEXT`);
   } catch (err) {
     // 字段已存在，忽略错误
@@ -150,6 +162,7 @@ export function initializeDatabase() {
       observer_teacher_name TEXT NOT NULL,
       teaching_teacher_name TEXT NOT NULL,
       class TEXT NOT NULL,
+      period INTEGER DEFAULT 1,
       date DATE DEFAULT CURRENT_DATE,
       notes TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -157,6 +170,13 @@ export function initializeDatabase() {
       FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
     )
   `);
+
+  // 确保节数字段存在（历史数据库默认按第一节处理）
+  try {
+    db.exec(`ALTER TABLE teaching_observations ADD COLUMN period INTEGER DEFAULT 1`);
+  } catch (err) {
+    // 字段已存在，忽略
+  }
 
   // 待处理量化记录表（用于AI导入时无法精确匹配的记录）
   db.exec(`
@@ -195,6 +215,57 @@ export function initializeDatabase() {
     // 字段已存在，忽略错误
   }
 
+  // 加班记录表（新功能）
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS overtime_records (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      teacher_name TEXT NOT NULL,
+      position TEXT NOT NULL,
+      overtime_time DATETIME NOT NULL,
+      note TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_overtime_teacher ON overtime_records(teacher_name);`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_overtime_position ON overtime_records(position);`);
+
+  // 加班时间点配置表
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS overtime_time_points (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      time_point TEXT NOT NULL UNIQUE,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  
+  // 插入默认时间点（如果表为空）
+  const timePointsCount = db.prepare(`SELECT COUNT(*) as count FROM overtime_time_points`).get() as any;
+  if (timePointsCount.count === 0) {
+    const defaultTimePoints = ['07:30', '08:00', '09:00', '10:00', '11:00', '14:00', '15:00', '16:00', '17:00', '18:00', '18:30', '19:00', '20:00', '21:30'];
+    const insertTimePoint = db.prepare(`INSERT INTO overtime_time_points (time_point) VALUES (?)`);
+    defaultTimePoints.forEach(tp => {
+      try {
+        insertTimePoint.run(tp);
+      } catch (e) {
+        // 忽略重复错误
+      }
+    });
+  }
+
+  // 用户配置表（存储AI配置等）
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS user_config (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      ai_config TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+  `);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_user_config_user_id ON user_config(user_id);`);
+
   // 创建索引
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_students_student_id ON students(student_id);
@@ -205,6 +276,7 @@ export function initializeDatabase() {
     CREATE INDEX IF NOT EXISTS idx_teacher_scores_teacher_id ON teacher_scores(teacher_id);
     CREATE INDEX IF NOT EXISTS idx_teacher_scores_date ON teacher_scores(date);
     CREATE INDEX IF NOT EXISTS idx_teaching_observations_date ON teaching_observations(date);
+    CREATE INDEX IF NOT EXISTS idx_teaching_observations_period ON teaching_observations(period);
     CREATE INDEX IF NOT EXISTS idx_teaching_observations_observer ON teaching_observations(observer_teacher_name);
     CREATE INDEX IF NOT EXISTS idx_logs_user_id ON logs(user_id);
     CREATE INDEX IF NOT EXISTS idx_logs_created_at ON logs(created_at);

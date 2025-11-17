@@ -5,8 +5,6 @@ import {
   Label,
   makeStyles,
   Spinner,
-  MessageBar,
-  MessageBarBody,
   Dialog,
   DialogTrigger,
   DialogSurface,
@@ -29,6 +27,7 @@ import {
   ChevronRight20Regular,
 } from '@fluentui/react-icons';
 import { teacherAPI, scoreAPI } from '../services/api';
+import { useToast } from '../utils/toast';
 import { useNavigate } from 'react-router-dom';
 
 const useStyles = makeStyles({
@@ -155,10 +154,9 @@ interface Score {
 const TeachersPageEnhanced: React.FC = () => {
   const styles = useStyles();
   const navigate = useNavigate();
+  const { showToast } = useToast();
   const [groupedTeachers, setGroupedTeachers] = useState<GroupedTeachers[]>([]);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
 
   const [addDialogOpen, setAddDialogOpen] = useState(false);
@@ -199,7 +197,7 @@ const TeachersPageEnhanced: React.FC = () => {
       
       setGroupedTeachers(grouped);
     } catch (err: any) {
-      setError(err.response?.data?.error || '加载教师列表失败');
+      showToast({ title: '加载失败', body: err.response?.data?.error || '加载教师列表失败', intent: 'error' });
     } finally {
       setLoading(false);
     }
@@ -211,7 +209,7 @@ const TeachersPageEnhanced: React.FC = () => {
       const response = await scoreAPI.getAll({ teacherName });
       setTeacherScores(response.data);
     } catch (err: any) {
-      setError(err.response?.data?.error || '加载量化记录失败');
+      showToast({ title: '加载失败', body: err.response?.data?.error || '加载量化记录失败', intent: 'error' });
     } finally {
       setLoading(false);
     }
@@ -255,16 +253,15 @@ const TeachersPageEnhanced: React.FC = () => {
 
     try {
       await teacherAPI.delete(teacher.id);
-      setSuccess('教师删除成功');
+      showToast({ title: '删除成功', body: '教师删除成功', intent: 'success' });
       loadTeachers();
     } catch (err: any) {
-      setError(err.response?.data?.error || '删除教师失败');
+      showToast({ title: '删除失败', body: err.response?.data?.error || '删除教师失败', intent: 'error' });
     }
   };
 
   const handleSubmitAdd = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
 
     try {
       await teacherAPI.create({
@@ -273,18 +270,17 @@ const TeachersPageEnhanced: React.FC = () => {
         phone: formData.phone,
         email: formData.email,
       });
-      setSuccess('教师添加成功');
+      showToast({ title: '添加成功', body: '教师添加成功', intent: 'success' });
       setAddDialogOpen(false);
       loadTeachers();
     } catch (err: any) {
-      setError(err.response?.data?.error || '添加教师失败');
+      showToast({ title: '添加失败', body: err.response?.data?.error || '添加教师失败', intent: 'error' });
     }
   };
 
   const handleSubmitEdit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!currentTeacher) return;
-    setError('');
 
     try {
       await teacherAPI.update(currentTeacher.id, {
@@ -293,11 +289,11 @@ const TeachersPageEnhanced: React.FC = () => {
         phone: formData.phone,
         email: formData.email,
       });
-      setSuccess('教师更新成功');
+      showToast({ title: '更新成功', body: '教师更新成功', intent: 'success' });
       setEditDialogOpen(false);
       loadTeachers();
     } catch (err: any) {
-      setError(err.response?.data?.error || '更新教师失败');
+      showToast({ title: '更新失败', body: err.response?.data?.error || '更新教师失败', intent: 'error' });
     }
   };
 
@@ -327,19 +323,7 @@ const TeachersPageEnhanced: React.FC = () => {
         </div>
       </div>
 
-      {error && (
-        <MessageBar intent="error" style={{ marginBottom: '16px' }}>
-          <MessageBarBody>{error}</MessageBarBody>
-        </MessageBar>
-      )}
-
-      {success && (
-        <MessageBar intent="success" style={{ marginBottom: '16px' }}>
-          <MessageBarBody>{success}</MessageBarBody>
-        </MessageBar>
-      )}
-
-      {loading && !detailDialogOpen ? (
+      {loading ? (
         <div style={{ textAlign: 'center', padding: '40px' }}>
           <Spinner label="加载中..." />
         </div>

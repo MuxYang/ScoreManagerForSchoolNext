@@ -3,12 +3,11 @@ import {
   Button,
   Card,
   makeStyles,
-  MessageBar,
-  MessageBarBody,
   Spinner,
 } from '@fluentui/react-components';
 import { ArrowDownload20Regular, ArrowUpload20Regular } from '@fluentui/react-icons';
 import { importExportAPI } from '../services/api';
+import { useToast } from '../utils/toast';
 
 const useStyles = makeStyles({
   container: {
@@ -32,15 +31,13 @@ const useStyles = makeStyles({
 });
 
 const ImportExportPage: React.FC = () => {
+  const { showToast } = useToast();
   const styles = useStyles();
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
 
   const handleExportStudents = async () => {
     try {
       setLoading(true);
-      setError('');
       const response = await importExportAPI.exportStudentsExcel();
       
       // 创建下载链接
@@ -52,9 +49,9 @@ const ImportExportPage: React.FC = () => {
       link.click();
       link.remove();
       
-      setSuccess('学生数据导出成功');
+      showToast({ title: '成功', body: '学生数据导出成功', intent: 'success' });
     } catch (err: any) {
-      setError(err.response?.data?.error || '导出失败');
+      showToast({ title: '错误', body: err.response?.data?.error || '导出失败', intent: 'error' });
     } finally {
       setLoading(false);
     }
@@ -63,7 +60,6 @@ const ImportExportPage: React.FC = () => {
   const handleExportScores = async () => {
     try {
       setLoading(true);
-      setError('');
       const response = await importExportAPI.exportScoresExcel();
       
       const url = window.URL.createObjectURL(new Blob([response.data]));
@@ -74,9 +70,9 @@ const ImportExportPage: React.FC = () => {
       link.click();
       link.remove();
       
-      setSuccess('积分数据导出成功');
+      showToast({ title: '成功', body: '积分数据导出成功', intent: 'success' });
     } catch (err: any) {
-      setError(err.response?.data?.error || '导出失败');
+      showToast({ title: '错误', body: err.response?.data?.error || '导出失败', intent: 'error' });
     } finally {
       setLoading(false);
     }
@@ -85,18 +81,6 @@ const ImportExportPage: React.FC = () => {
   return (
     <div className={styles.container}>
       <h2>数据导入导出</h2>
-
-      {error && (
-        <MessageBar intent="error" style={{ marginTop: '16px' }}>
-          <MessageBarBody>{error}</MessageBarBody>
-        </MessageBar>
-      )}
-
-      {success && (
-        <MessageBar intent="success" style={{ marginTop: '16px' }}>
-          <MessageBarBody>{success}</MessageBarBody>
-        </MessageBar>
-      )}
 
       <div className={styles.grid}>
         <Card className={styles.card}>

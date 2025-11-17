@@ -11,8 +11,6 @@ import {
   createTableColumn,
   Card,
   makeStyles,
-  MessageBar,
-  MessageBarBody,
   Spinner,
   Dialog,
   DialogTrigger,
@@ -24,6 +22,7 @@ import {
 } from '@fluentui/react-components';
 import { ArrowDownload20Regular, ArrowSync20Regular, Delete20Regular } from '@fluentui/react-icons';
 import { backupAPI } from '../services/api';
+import { useToast } from '../utils/toast';
 import { useAuth } from '../contexts/AuthContext';
 import PageTitle from '../components/PageTitle';
 
@@ -56,12 +55,11 @@ interface Backup {
 }
 
 const BackupPage: React.FC = () => {
+  const { showToast } = useToast();
   const styles = useStyles();
   const { user } = useAuth();
   const [backups, setBackups] = useState<Backup[]>([]);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
   const [restoreDialogOpen, setRestoreDialogOpen] = useState(false);
   const [selectedBackup, setSelectedBackup] = useState<string | null>(null);
 
@@ -87,7 +85,7 @@ const BackupPage: React.FC = () => {
       const response = await backupAPI.getList();
       setBackups(response.data);
     } catch (err: any) {
-      setError(err.response?.data?.error || '加载备份列表失败');
+      showToast({ title: '错误', body: err.response?.data?.error || '加载备份列表失败', intent: 'error' });
     } finally {
       setLoading(false);
     }
@@ -96,12 +94,11 @@ const BackupPage: React.FC = () => {
   const handleCreateBackup = async () => {
     try {
       setLoading(true);
-      setError('');
       await backupAPI.create();
-      setSuccess('备份创建成功');
+      showToast({ title: '成功', body: '备份创建成功', intent: 'success' });
       loadBackups();
     } catch (err: any) {
-      setError(err.response?.data?.error || '创建备份失败');
+      showToast({ title: '错误', body: err.response?.data?.error || '创建备份失败', intent: 'error' });
     } finally {
       setLoading(false);
     }
@@ -117,13 +114,12 @@ const BackupPage: React.FC = () => {
 
     try {
       setLoading(true);
-      setError('');
       await backupAPI.restore(selectedBackup);
-      setSuccess('备份恢复成功，当前数据已自动备份');
+      showToast({ title: '成功', body: '备份恢复成功，当前数据已自动备份', intent: 'success' });
       setRestoreDialogOpen(false);
       loadBackups();
     } catch (err: any) {
-      setError(err.response?.data?.error || '恢复备份失败');
+      showToast({ title: '错误', body: err.response?.data?.error || '恢复备份失败', intent: 'error' });
     } finally {
       setLoading(false);
     }
@@ -134,10 +130,10 @@ const BackupPage: React.FC = () => {
 
     try {
       await backupAPI.delete(filename);
-      setSuccess('备份删除成功');
+      showToast({ title: '成功', body: '备份删除成功', intent: 'success' });
       loadBackups();
     } catch (err: any) {
-      setError(err.response?.data?.error || '删除备份失败');
+      showToast({ title: '错误', body: err.response?.data?.error || '删除备份失败', intent: 'error' });
     }
   };
 
@@ -205,18 +201,6 @@ const BackupPage: React.FC = () => {
           创建新备份
         </Button>
       </div>
-
-      {error && (
-        <MessageBar intent="error" style={{ marginBottom: '16px' }}>
-          <MessageBarBody>{error}</MessageBarBody>
-        </MessageBar>
-      )}
-
-      {success && (
-        <MessageBar intent="success" style={{ marginBottom: '16px' }}>
-          <MessageBarBody>{success}</MessageBarBody>
-        </MessageBar>
-      )}
 
       <Card className={styles.card}>
         <h3>⚠️ 重要提示</h3>

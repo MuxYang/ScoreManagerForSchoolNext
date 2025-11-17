@@ -20,7 +20,7 @@ router.get('/', authenticateToken, (req: Request, res: Response) => {
         st.class 
       FROM scores s
       JOIN students st ON s.student_id = st.id
-      WHERE 1=1
+      WHERE s.date != '1970-01-01'
     `;
     const params: any[] = [];
 
@@ -66,7 +66,7 @@ router.get('/statistics/:studentId', authenticateToken, (req: Request, res: Resp
         MAX(points) as max_points,
         MIN(points) as min_points
       FROM scores
-      WHERE student_id = ?
+      WHERE student_id = ? AND date != '1970-01-01'
     `).get(req.params.studentId);
 
     res.json(stats);
@@ -943,10 +943,10 @@ router.get('/dashboard-stats', authenticateToken, (req: Request, res: Response) 
     // 教师总数
     const teacherCount = db.prepare('SELECT COUNT(*) as count FROM teachers').get() as { count: number };
     
-    // 积分记录总数
-    const scoreCount = db.prepare('SELECT COUNT(*) as count FROM scores').get() as { count: number };
+    // 积分记录总数（排除占位记录）
+    const scoreCount = db.prepare("SELECT COUNT(*) as count FROM scores WHERE date != '1970-01-01'").get() as { count: number };
     
-    // 达标人数（总积分 >= 6）
+    // 达标人数（总积分 >= 6，排除占位记录）
     const qualifiedStudents = db.prepare(`
       SELECT 
         st.id,
@@ -955,13 +955,13 @@ router.get('/dashboard-stats', authenticateToken, (req: Request, res: Response) 
         st.class,
         SUM(s.points) as total_points
       FROM students st
-      LEFT JOIN scores s ON st.id = s.student_id
+      LEFT JOIN scores s ON st.id = s.student_id AND s.date != '1970-01-01'
       GROUP BY st.id
       HAVING total_points >= 6
       ORDER BY total_points DESC
     `).all() as any[];
     
-    // 积分排名（前10）
+    // 积分排名（前10，排除占位记录）
     const topRankings = db.prepare(`
       SELECT 
         st.id,
@@ -971,13 +971,13 @@ router.get('/dashboard-stats', authenticateToken, (req: Request, res: Response) 
         COALESCE(SUM(s.points), 0) as total_points,
         COUNT(s.id) as record_count
       FROM students st
-      LEFT JOIN scores s ON st.id = s.student_id
+      LEFT JOIN scores s ON st.id = s.student_id AND s.date != '1970-01-01'
       GROUP BY st.id
       ORDER BY total_points DESC
       LIMIT 10
     `).all();
     
-    // 最近积分记录（最近10条）
+    // 最近积分记录（最近10条，排除占位记录）
     const recentScores = db.prepare(`
       SELECT 
         s.*,
@@ -986,6 +986,7 @@ router.get('/dashboard-stats', authenticateToken, (req: Request, res: Response) 
         st.class
       FROM scores s
       JOIN students st ON s.student_id = st.id
+      WHERE s.date != '1970-01-01'
       ORDER BY s.created_at DESC
       LIMIT 10
     `).all();

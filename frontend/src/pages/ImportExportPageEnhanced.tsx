@@ -3,8 +3,6 @@ import {
   Button,
   Card,
   makeStyles,
-  MessageBar,
-  MessageBarBody,
   Spinner,
   Dialog,
   DialogSurface,
@@ -28,6 +26,7 @@ import {
 } from '@fluentui/react-components';
 import { ArrowDownload20Regular, ArrowUpload20Regular } from '@fluentui/react-icons';
 import { importExportAPI, studentAPI, scoreAPI } from '../services/api';
+import { useToast } from '../utils/toast';
 import * as ExcelJS from 'exceljs';
 
 const useStyles = makeStyles({
@@ -68,11 +67,10 @@ interface PreviewData {
 }
 
 const ImportExportPageEnhanced: React.FC = () => {
+  const { showToast } = useToast();
   const styles = useStyles();
   const [selectedTab, setSelectedTab] = useState('export');
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
   
   // 导入相关状态
   const [importDialogOpen, setImportDialogOpen] = useState(false);
@@ -88,7 +86,6 @@ const ImportExportPageEnhanced: React.FC = () => {
   const handleExportStudents = async () => {
     try {
       setLoading(true);
-      setError('');
       const response = await importExportAPI.exportStudentsExcel();
       
       const url = window.URL.createObjectURL(new Blob([response.data]));
@@ -99,9 +96,9 @@ const ImportExportPageEnhanced: React.FC = () => {
       link.click();
       link.remove();
       
-      setSuccess('学生数据导出成功');
+      showToast({ title: '成功', body: '学生数据导出成功', intent: 'success' });
     } catch (err: any) {
-      setError(err.response?.data?.error || '导出失败');
+      showToast({ title: '错误', body: err.response?.data?.error || '导出失败', intent: 'error' });
     } finally {
       setLoading(false);
     }
@@ -110,7 +107,6 @@ const ImportExportPageEnhanced: React.FC = () => {
   const handleExportScores = async () => {
     try {
       setLoading(true);
-      setError('');
       const response = await importExportAPI.exportScoresExcel();
       
       const url = window.URL.createObjectURL(new Blob([response.data]));
@@ -121,9 +117,9 @@ const ImportExportPageEnhanced: React.FC = () => {
       link.click();
       link.remove();
       
-      setSuccess('量化数据导出成功');
+      showToast({ title: '成功', body: '量化数据导出成功', intent: 'success' });
     } catch (err: any) {
-      setError(err.response?.data?.error || '导出失败');
+      showToast({ title: '错误', body: err.response?.data?.error || '导出失败', intent: 'error' });
     } finally {
       setLoading(false);
     }
@@ -134,8 +130,6 @@ const ImportExportPageEnhanced: React.FC = () => {
     if (!file) return;
 
     setSelectedFile(file);
-    setError('');
-
     // 读取文件内容
     const reader = new FileReader();
     reader.onload = async (event) => {
@@ -146,7 +140,7 @@ const ImportExportPageEnhanced: React.FC = () => {
         
         const worksheet = workbook.worksheets[0];
         if (!worksheet) {
-          setError('文件为空');
+          showToast({ title: '错误', body: '文件为空', intent: 'error' });
           return;
         }
 
@@ -161,7 +155,7 @@ const ImportExportPageEnhanced: React.FC = () => {
         });
 
         if (jsonData.length === 0) {
-          setError('文件为空');
+          showToast({ title: '错误', body: '文件为空', intent: 'error' });
           return;
         }
 
@@ -212,7 +206,7 @@ const ImportExportPageEnhanced: React.FC = () => {
         setColumnMapping(autoMapping);
 
       } catch (err) {
-        setError('文件解析失败，请确保是有效的Excel文件');
+        showToast({ title: '错误', body: '文件解析失败，请确保是有效的Excel文件', intent: 'error' });
       }
     };
     reader.readAsArrayBuffer(file);
@@ -225,32 +219,29 @@ const ImportExportPageEnhanced: React.FC = () => {
     setPreviewData([]);
     setHeaders([]);
     setColumnMapping({});
-    setError('');
-  };
+    };
 
   const handleImport = async () => {
     if (!selectedFile || previewData.length === 0) {
-      setError('请先选择文件');
+      showToast({ title: '错误', body: '请先选择文件', intent: 'error' });
       return;
     }
 
     // 验证列映射
     if (importType === 'students') {
       if (!columnMapping.student_id || !columnMapping.name || !columnMapping.class) {
-        setError('请完成所有必填字段的列映射（学号、姓名、班级）');
+        showToast({ title: '错误', body: '请完成所有必填字段的列映射（学号、姓名、班级）', intent: 'error' });
         return;
       }
     } else {
       if (!columnMapping.student_id || !columnMapping.points || !columnMapping.reason) {
-        setError('请完成所有必填字段的列映射（学号、量化、事由）');
+        showToast({ title: '错误', body: '请完成所有必填字段的列映射（学号、量化、事由）', intent: 'error' });
         return;
       }
     }
 
     try {
       setLoading(true);
-      setError('');
-
       // 读取完整文件
       const reader = new FileReader();
       reader.onload = async (event) => {
@@ -261,7 +252,7 @@ const ImportExportPageEnhanced: React.FC = () => {
           
           const worksheet = workbook.worksheets[0];
           if (!worksheet) {
-            setError('文件为空');
+            showToast({ title: '错误', body: '文件为空', intent: 'error' });
             setLoading(false);
             return;
           }
@@ -289,7 +280,7 @@ const ImportExportPageEnhanced: React.FC = () => {
 
             // 批量导入
             await studentAPI.batchImport(students);
-            setSuccess(`成功导入 ${students.length} 条学生记录`);
+            showToast({ title: "成功", body: `成功导入 ${students.length} 条学生记录`, intent: "success" });
           } else {
             // 构建量化数据
             const scores = dataRows.map(row => ({
@@ -302,19 +293,19 @@ const ImportExportPageEnhanced: React.FC = () => {
 
             // 批量导入
             await scoreAPI.batchImport(scores);
-            setSuccess(`成功导入 ${scores.length} 条量化记录`);
+            showToast({ title: "成功", body: `成功导入 ${scores.length} 条量化记录`, intent: "success" });
           }
 
           setImportDialogOpen(false);
         } catch (err: any) {
-          setError(err.response?.data?.error || '导入失败');
+          showToast({ title: '错误', body: err.response?.data?.error || '导入失败', intent: 'error' });
         } finally {
           setLoading(false);
         }
       };
       reader.readAsArrayBuffer(selectedFile);
     } catch (err: any) {
-      setError('导入失败');
+      showToast({ title: '错误', body: '导入失败', intent: 'error' });
       setLoading(false);
     }
   };
@@ -330,18 +321,6 @@ const ImportExportPageEnhanced: React.FC = () => {
   return (
     <div className={styles.container}>
       <h2>数据导入导出</h2>
-
-      {error && (
-        <MessageBar intent="error" style={{ marginTop: '16px' }}>
-          <MessageBarBody>{error}</MessageBarBody>
-        </MessageBar>
-      )}
-
-      {success && (
-        <MessageBar intent="success" style={{ marginTop: '16px' }}>
-          <MessageBarBody>{success}</MessageBarBody>
-        </MessageBar>
-      )}
 
       <TabList
         selectedValue={selectedTab}

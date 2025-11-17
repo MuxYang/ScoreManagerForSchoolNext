@@ -5,8 +5,6 @@ import {
   Label,
   makeStyles,
   Spinner,
-  MessageBar,
-  MessageBarBody,
   Dialog,
   DialogTrigger,
   DialogSurface,
@@ -35,11 +33,12 @@ import {
 import { studentAPI, scoreAPI } from '../services/api';
 import { useNavigate } from 'react-router-dom';
 import PageTitle from '../components/PageTitle';
+import { useToast } from '../utils/toast';
 
 // ==================== 样式定义 ====================
 const useStyles = makeStyles({
   container: {
-    padding: '20px',
+    padding: '16px',
     maxWidth: '1600px',
     margin: '0 auto',
     '@media (max-width: 768px)': {
@@ -51,17 +50,17 @@ const useStyles = makeStyles({
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: '24px',
+    marginBottom: '16px',
     '@media (max-width: 768px)': {
       flexDirection: 'column',
       gap: '12px',
       alignItems: 'stretch',
-      marginBottom: '16px',
+      marginBottom: '12px',
     },
   },
   actions: {
     display: 'flex',
-    gap: '12px',
+    gap: '8px',
     '@media (max-width: 768px)': {
       flexDirection: 'column',
       gap: '8px',
@@ -69,9 +68,9 @@ const useStyles = makeStyles({
   },
   filterSection: {
     display: 'flex',
-    gap: '12px',
-    marginBottom: '20px',
-    padding: '16px',
+    gap: '8px',
+    marginBottom: '16px',
+    padding: '12px',
     backgroundColor: tokens.colorNeutralBackground2,
     borderRadius: tokens.borderRadiusMedium,
     flexWrap: 'wrap',
@@ -80,8 +79,8 @@ const useStyles = makeStyles({
       flexDirection: 'column',
       alignItems: 'stretch',
       gap: '8px',
-      padding: '12px',
-      marginBottom: '16px',
+      padding: '10px',
+      marginBottom: '12px',
     },
   },
   filterField: {
@@ -105,7 +104,7 @@ const useStyles = makeStyles({
     backgroundColor: tokens.colorNeutralBackground2,
     fontWeight: 600,
     textAlign: 'left' as const,
-    padding: '16px',
+    padding: '12px',
     borderBottom: `2px solid ${tokens.colorNeutralStroke1}`,
     cursor: 'pointer',
     userSelect: 'none' as const,
@@ -113,7 +112,7 @@ const useStyles = makeStyles({
       backgroundColor: tokens.colorNeutralBackground2Hover,
     },
     '@media (max-width: 768px)': {
-      padding: '12px 8px',
+      padding: '10px 8px',
       fontSize: '14px',
     },
   },
@@ -271,13 +270,12 @@ type SortDirection = 'asc' | 'desc';
 const StudentsPageComplete: React.FC = () => {
   const styles = useStyles();
   const navigate = useNavigate();
+  const { showToast } = useToast();
 
   // ==================== 状态管理 ====================
   // 数据状态
   const [students, setStudents] = useState<Student[]>([]);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
 
   // 对话框状态
   const [addDialogOpen, setAddDialogOpen] = useState(false);
@@ -326,7 +324,7 @@ const StudentsPageComplete: React.FC = () => {
       const response = await studentAPI.getAll();
       setStudents(response.data);
     } catch (err: any) {
-      setError(err.response?.data?.error || '加载学生列表失败');
+      showToast({ title: '加载失败', body: err.response?.data?.error || '加载学生列表失败', intent: 'error' });
     } finally {
       setLoading(false);
     }
@@ -338,7 +336,7 @@ const StudentsPageComplete: React.FC = () => {
       const response = await scoreAPI.getAll({ studentId });
       setStudentScores(response.data);
     } catch (err: any) {
-      setError(err.response?.data?.error || '加载量化记录失败');
+      showToast({ title: '加载失败', body: err.response?.data?.error || '加载量化记录失败', intent: 'error' });
     } finally {
       setLoading(false);
     }
@@ -455,11 +453,11 @@ const StudentsPageComplete: React.FC = () => {
       for (const id of selectedIds) {
         await studentAPI.delete(id);
       }
-      setSuccess(`成功删除 ${selectedIds.length} 个学生`);
+      showToast({ title: '删除成功', body: `成功删除 ${selectedIds.length} 个学生`, intent: 'success' });
       setSelectedIds([]);
       loadStudents();
     } catch (err: any) {
-      setError(err.response?.data?.error || '批量删除失败');
+      showToast({ title: '删除失败', body: err.response?.data?.error || '批量删除失败', intent: 'error' });
     } finally {
       setLoading(false);
     }
@@ -492,16 +490,15 @@ const StudentsPageComplete: React.FC = () => {
 
     try {
       await studentAPI.delete(student.id);
-      setSuccess('学生删除成功');
+      showToast({ title: '删除成功', body: '学生删除成功', intent: 'success' });
       loadStudents();
     } catch (err: any) {
-      setError(err.response?.data?.error || '删除学生失败');
+      showToast({ title: '删除失败', body: err.response?.data?.error || '删除学生失败', intent: 'error' });
     }
   };
 
   const handleSubmitAdd = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
 
     try {
       await studentAPI.create({
@@ -509,18 +506,17 @@ const StudentsPageComplete: React.FC = () => {
         name: formData.name,
         studentClass: formData.class,
       });
-      setSuccess('学生添加成功');
+      showToast({ title: '添加成功', body: '学生添加成功', intent: 'success' });
       setAddDialogOpen(false);
       loadStudents();
     } catch (err: any) {
-      setError(err.response?.data?.error || '添加学生失败');
+      showToast({ title: '添加失败', body: err.response?.data?.error || '添加学生失败', intent: 'error' });
     }
   };
 
   const handleSubmitEdit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!currentStudent) return;
-    setError('');
 
     try {
       await studentAPI.update(currentStudent.id, {
@@ -528,11 +524,11 @@ const StudentsPageComplete: React.FC = () => {
         name: formData.name,
         studentClass: formData.class,
       });
-      setSuccess('学生更新成功');
+      showToast({ title: '更新成功', body: '学生更新成功', intent: 'success' });
       setEditDialogOpen(false);
       loadStudents();
     } catch (err: any) {
-      setError(err.response?.data?.error || '更新学生失败');
+      showToast({ title: '更新失败', body: err.response?.data?.error || '更新学生失败', intent: 'error' });
     }
   };
 
@@ -542,15 +538,13 @@ const StudentsPageComplete: React.FC = () => {
 
   // 处理导出学生量化记录
   const handleExport = async () => {
-    setError('');
-    
     if (!exportStartDate || !exportEndDate) {
-      setError('请选择开始日期和结束日期');
+      showToast({ title: '导出失败', body: '请选择开始日期和结束日期', intent: 'warning' });
       return;
     }
 
     if (exportStartDate > exportEndDate) {
-      setError('开始日期不能晚于结束日期');
+      showToast({ title: '导出失败', body: '开始日期不能晚于结束日期', intent: 'warning' });
       return;
     }
 
@@ -573,7 +567,7 @@ const StudentsPageComplete: React.FC = () => {
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
 
-      setSuccess(`成功导出学生量化记录`);
+      showToast({ title: '导出成功', body: '成功导出学生量化记录', intent: 'success' });
       setExportDialogOpen(false);
       setExportStartDate('');
       setExportEndDate('');
@@ -593,7 +587,7 @@ const StudentsPageComplete: React.FC = () => {
         errorMessage = err.response.data.error;
       }
       
-      setError(errorMessage);
+      showToast({ title: '导出失败', body: errorMessage, intent: 'error' });
     } finally {
       setLoading(false);
     }
@@ -635,19 +629,6 @@ const StudentsPageComplete: React.FC = () => {
           </Button>
         </div>
       </div>
-
-      {/* 消息提示 */}
-      {error && (
-        <MessageBar intent="error" style={{ marginBottom: '16px' }}>
-          <MessageBarBody>{error}</MessageBarBody>
-        </MessageBar>
-      )}
-
-      {success && (
-        <MessageBar intent="success" style={{ marginBottom: '16px' }}>
-          <MessageBarBody>{success}</MessageBarBody>
-        </MessageBar>
-      )}
 
       {/* 筛选区域 */}
       <div className={styles.filterSection}>
@@ -1103,13 +1084,11 @@ const StudentsPageComplete: React.FC = () => {
                     onChange={(e) => setExportEndDate(e.target.value)}
                   />
                 </Field>
-                <MessageBar intent="info">
-                  <MessageBarBody>
-                    <div>• 将导出为 Excel (XLSX) 格式文件</div>
-                    <div>• 仅包含有量化记录的学生</div>
-                    <div>• 包含班级、姓名、学号及详细量化记录</div>
-                  </MessageBarBody>
-                </MessageBar>
+                <div style={{ marginTop: '12px', padding: '12px', backgroundColor: 'var(--colorNeutralBackground3)', borderRadius: '4px', fontSize: '13px' }}>
+                  <div>• 将导出为 Excel (XLSX) 格式文件</div>
+                  <div>• 仅包含有量化记录的学生</div>
+                  <div>• 包含班级、姓名、学号及详细量化记录</div>
+                </div>
               </div>
             </DialogContent>
             <DialogActions>

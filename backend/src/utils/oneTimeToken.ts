@@ -7,8 +7,8 @@ const tokenStore = new Map<string, { createdAt: number; used: boolean }>();
 
 // Token配置
 const TOKEN_LENGTH = 128; // 128字符长度
-const TOKEN_EXPIRY_MS = 5 * 60 * 1000; // 5分钟过期
-const CLEANUP_INTERVAL_MS = 60 * 1000; // 每分钟清理一次过期token
+const TOKEN_EXPIRY_MS = 10 * 1000; // 10秒过期（支持并发请求和缓存）
+const CLEANUP_INTERVAL_MS = 30 * 1000; // 每30秒清理一次过期token
 
 /**
  * 生成一个新的一次性token（128位）
@@ -32,7 +32,7 @@ export function generateOneTimeToken(): string {
 }
 
 /**
- * 验证并消费token（只能使用一次）
+ * 验证并消费token（在有效期内可重复使用，避免并发请求问题）
  * @param token - 要验证的token
  * @returns true if valid, false otherwise
  */
@@ -51,15 +51,6 @@ export function validateAndConsumeToken(token: string | undefined): boolean {
     return false;
   }
   
-  // 检查是否已使用
-  if (tokenData.used) {
-    logger.warn('Token already used', { 
-      tokenPrefix: token.substring(0, 8) 
-    });
-    tokenStore.delete(token); // 删除已使用的token
-    return false;
-  }
-  
   // 检查是否过期
   const age = Date.now() - tokenData.createdAt;
   if (age > TOKEN_EXPIRY_MS) {
@@ -71,13 +62,15 @@ export function validateAndConsumeToken(token: string | undefined): boolean {
     return false;
   }
   
-  // 标记为已使用并删除
-  tokenStore.delete(token);
-  
-  logger.debug('token验证成功并已消费', { 
-    tokenPrefix: token.substring(0, 8),
-    remainingTokens: tokenStore.size 
-  });
+  // 标记为已使用（但不删除，允许在有效期内重复使用）
+  // 这样可以支持并发请求使用同一个令牌
+  if (!tokenData.used) {
+    tokenData.used = true;
+    logger.debug('Token首次使用', { 
+      tokenPrefix: token.substring(0, 8),
+      remainingTokens: tokenStore.size 
+    });
+  }
   
   return true;
 }

@@ -12,8 +12,6 @@ import {
   DialogBody,
   DialogActions,
   DialogContent,
-  MessageBar,
-  MessageBarBody,
   DataGrid,
   DataGridHeader,
   DataGridRow,
@@ -27,6 +25,7 @@ import {
 } from '@fluentui/react-components';
 import { AddRegular, EditRegular, DeleteRegular, ArrowImport20Regular, ArrowExport20Regular } from '@fluentui/react-icons';
 import { teacherAPI } from '../services/api';
+import { useToast } from '../utils/toast';
 
 const useStyles = makeStyles({
   container: {
@@ -64,12 +63,11 @@ interface GroupedTeachers {
 }
 
 const TeachersPage: React.FC = () => {
+  const { showToast } = useToast();
   const styles = useStyles();
   const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [groupedTeachers, setGroupedTeachers] = useState<GroupedTeachers[]>([]);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
@@ -87,13 +85,12 @@ const TeachersPage: React.FC = () => {
 
   const loadTeachers = async () => {
     setLoading(true);
-    setError('');
     try {
       const response = await teacherAPI.getAll();
       setTeachers(response.data.teachers || response.data);
       setGroupedTeachers(response.data.grouped || []);
     } catch (err: any) {
-      setError(err.response?.data?.error || '加载教师列表失败');
+      showToast({ title: '错误', body: err.response?.data?.error || '加载教师列表失败', intent: 'error' });
     } finally {
       setLoading(false);
     }
@@ -127,26 +124,23 @@ const TeachersPage: React.FC = () => {
   };
 
   const handleSubmit = async () => {
-    setError('');
-    setSuccess('');
-
     if (!formData.name.trim() || !formData.subject.trim()) {
-      setError('请填写教师姓名和科目');
+      showToast({ title: '错误', body: '请填写教师姓名和科目', intent: 'error' });
       return;
     }
 
     try {
       if (editingTeacher) {
         await teacherAPI.update(editingTeacher.id, formData);
-        setSuccess('教师信息更新成功');
+        showToast({ title: '成功', body: '教师信息更新成功', intent: 'success' });
       } else {
         await teacherAPI.create(formData);
-        setSuccess('教师添加成功');
+        showToast({ title: '成功', body: '教师添加成功', intent: 'success' });
       }
       setDialogOpen(false);
       loadTeachers();
     } catch (err: any) {
-      setError(err.response?.data?.error || '操作失败');
+      showToast({ title: '错误', body: err.response?.data?.error || '操作失败', intent: 'error' });
     }
   };
 
@@ -157,18 +151,15 @@ const TeachersPage: React.FC = () => {
 
     try {
       await teacherAPI.delete(id);
-      setSuccess('教师删除成功');
+      showToast({ title: '成功', body: '教师删除成功', intent: 'success' });
       loadTeachers();
     } catch (err: any) {
-      setError(err.response?.data?.error || '删除失败');
+      showToast({ title: '错误', body: err.response?.data?.error || '删除失败', intent: 'error' });
     }
   };
 
   // 处理导入
   const handleImport = async () => {
-    setError('');
-    setSuccess('');
-    
     try {
       const lines = importData.trim().split('\n');
       const teachersToImport = lines.map(line => {
@@ -183,7 +174,7 @@ const TeachersPage: React.FC = () => {
       }).filter(t => t.name && t.subject);
 
       if (teachersToImport.length === 0) {
-        setError('没有有效的教师数据');
+        showToast({ title: '错误', body: '没有有效的教师数据', intent: 'error' });
         return;
       }
 
@@ -192,26 +183,24 @@ const TeachersPage: React.FC = () => {
         await teacherAPI.create(teacher);
       }
 
-      setSuccess(`成功导入 ${teachersToImport.length} 位教师`);
+      showToast({ title: "成功", body: `成功导入 ${teachersToImport.length} 位教师`, intent: "success" });
       setImportDialogOpen(false);
       setImportData('');
       loadTeachers();
     } catch (err: any) {
-      setError(err.response?.data?.error || '导入失败');
+      showToast({ title: '错误', body: err.response?.data?.error || '导入失败', intent: 'error' });
     }
   };
 
   // 处理导出量化记录
   const handleExport = async () => {
-    setError('');
-    
     if (!exportStartDate || !exportEndDate) {
-      setError('请选择开始日期和结束日期');
+      showToast({ title: '错误', body: '请选择开始日期和结束日期', intent: 'error' });
       return;
     }
 
     if (exportStartDate > exportEndDate) {
-      setError('开始日期不能晚于结束日期');
+      showToast({ title: '错误', body: '开始日期不能晚于结束日期', intent: 'error' });
       return;
     }
 
@@ -234,7 +223,7 @@ const TeachersPage: React.FC = () => {
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
 
-      setSuccess(`成功导出教师量化记录`);
+      showToast({ title: "成功", body: `成功导出教师量化记录`, intent: "success" });
       setExportDialogOpen(false);
       setExportStartDate('');
       setExportEndDate('');
@@ -254,7 +243,7 @@ const TeachersPage: React.FC = () => {
         errorMessage = err.response.data.error;
       }
       
-      setError(errorMessage);
+      showToast({ title: '错误', body: errorMessage, intent: 'error' });
     } finally {
       setLoading(false);
     }
@@ -347,18 +336,6 @@ const TeachersPage: React.FC = () => {
           </Button>
         </div>
       </div>
-
-      {error && (
-        <MessageBar intent="error" style={{ marginBottom: '16px' }}>
-          <MessageBarBody>{error}</MessageBarBody>
-        </MessageBar>
-      )}
-
-      {success && (
-        <MessageBar intent="success" style={{ marginBottom: '16px' }}>
-          <MessageBarBody>{success}</MessageBarBody>
-        </MessageBar>
-      )}
 
       {loading ? (
         <div>加载中...</div>
@@ -550,13 +527,9 @@ const TeachersPage: React.FC = () => {
                     onChange={(e) => setExportEndDate(e.target.value)}
                   />
                 </Field>
-                <MessageBar intent="info" style={{ marginTop: '12px' }}>
-                  <MessageBarBody>
-                    <div>• 将导出为 Excel (XLSX) 格式文件</div>
+                <div style={{ padding: "12px", backgroundColor: "var(--colorNeutralBackground3)", borderRadius: "4px", marginTop: "12px" }}><div>• 将导出为 Excel (XLSX) 格式文件</div>
                     <div>• 按科目组和教师分组统计</div>
-                    <div>• 包含科目组累计分数、教师分数及详细量化记录</div>
-                  </MessageBarBody>
-                </MessageBar>
+                    <div>• 包含科目组累计分数、教师分数及详细量化记录</div></div>
               </div>
             </DialogContent>
             <DialogActions>

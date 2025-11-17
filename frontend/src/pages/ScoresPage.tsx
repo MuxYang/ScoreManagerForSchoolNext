@@ -21,11 +21,10 @@ import {
   Select,
   makeStyles,
   Spinner,
-  MessageBar,
-  MessageBarBody,
 } from '@fluentui/react-components';
 import { Add20Regular, Delete20Regular, Edit20Regular } from '@fluentui/react-icons';
 import { scoreAPI, studentAPI } from '../services/api';
+import { useToast } from '../utils/toast';
 
 const useStyles = makeStyles({
   container: {
@@ -74,12 +73,11 @@ interface Student {
 }
 
 const ScoresPage: React.FC = () => {
+  const { showToast } = useToast();
   const styles = useStyles();
   const [scores, setScores] = useState<Score[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingScore, setEditingScore] = useState<Score | null>(null);
   const [formData, setFormData] = useState({
@@ -101,7 +99,7 @@ const ScoresPage: React.FC = () => {
       const response = await scoreAPI.getAll();
       setScores(response.data);
     } catch (err: any) {
-      setError(err.response?.data?.error || '加载积分记录失败');
+      showToast({ title: '错误', body: err.response?.data?.error || '加载积分记录失败', intent: 'error' });
     } finally {
       setLoading(false);
     }
@@ -145,18 +143,15 @@ const ScoresPage: React.FC = () => {
 
     try {
       await scoreAPI.delete(id);
-      setSuccess('积分记录删除成功');
+      showToast({ title: '成功', body: '积分记录删除成功', intent: 'success' });
       loadScores();
     } catch (err: any) {
-      setError(err.response?.data?.error || '删除积分记录失败');
+      showToast({ title: '错误', body: err.response?.data?.error || '删除积分记录失败', intent: 'error' });
     }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
-    setSuccess('');
-
     try {
       const data = {
         studentId: parseInt(formData.studentId),
@@ -168,15 +163,15 @@ const ScoresPage: React.FC = () => {
 
       if (editingScore) {
         await scoreAPI.update(editingScore.id, data);
-        setSuccess('积分记录更新成功');
+        showToast({ title: '成功', body: '积分记录更新成功', intent: 'success' });
       } else {
         await scoreAPI.create(data);
-        setSuccess('积分记录添加成功');
+        showToast({ title: '成功', body: '积分记录添加成功', intent: 'success' });
       }
       setDialogOpen(false);
       loadScores();
     } catch (err: any) {
-      setError(err.response?.data?.error || '操作失败');
+      showToast({ title: '错误', body: err.response?.data?.error || '操作失败', intent: 'error' });
     }
   };
 
@@ -247,18 +242,6 @@ const ScoresPage: React.FC = () => {
           添加积分记录
         </Button>
       </div>
-
-      {error && (
-        <MessageBar intent="error" style={{ marginBottom: '16px' }}>
-          <MessageBarBody>{error}</MessageBarBody>
-        </MessageBar>
-      )}
-
-      {success && (
-        <MessageBar intent="success" style={{ marginBottom: '16px' }}>
-          <MessageBarBody>{success}</MessageBarBody>
-        </MessageBar>
-      )}
 
       {loading ? (
         <Spinner label="加载中..." />

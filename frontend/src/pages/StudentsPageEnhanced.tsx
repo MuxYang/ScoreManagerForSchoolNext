@@ -5,8 +5,6 @@ import {
   Label,
   makeStyles,
   Spinner,
-  MessageBar,
-  MessageBarBody,
   Dialog,
   DialogTrigger,
   DialogSurface,
@@ -27,6 +25,7 @@ import {
 } from '@fluentui/react-icons';
 import { studentAPI, scoreAPI } from '../services/api';
 import { useNavigate } from 'react-router-dom';
+import { useToast } from '../utils/toast';
 
 const useStyles = makeStyles({
   container: {
@@ -117,10 +116,9 @@ interface Score {
 const StudentsPageEnhanced: React.FC = () => {
   const styles = useStyles();
   const navigate = useNavigate();
+  const { showToast } = useToast();
   const [students, setStudents] = useState<Student[]>([]);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
   
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
@@ -144,7 +142,7 @@ const StudentsPageEnhanced: React.FC = () => {
       const response = await studentAPI.getAll();
       setStudents(response.data);
     } catch (err: any) {
-      setError(err.response?.data?.error || '加载学生列表失败');
+      showToast({ title: '加载失败', body: err.response?.data?.error || '加载学生列表失败', intent: 'error' });
     } finally {
       setLoading(false);
     }
@@ -156,7 +154,7 @@ const StudentsPageEnhanced: React.FC = () => {
       const response = await scoreAPI.getAll({ studentId });
       setStudentScores(response.data);
     } catch (err: any) {
-      setError(err.response?.data?.error || '加载量化记录失败');
+      showToast({ title: '加载失败', body: err.response?.data?.error || '加载量化记录失败', intent: 'error' });
     } finally {
       setLoading(false);
     }
@@ -188,16 +186,15 @@ const StudentsPageEnhanced: React.FC = () => {
 
     try {
       await studentAPI.delete(student.id);
-      setSuccess('学生删除成功');
+      showToast({ title: '删除成功', body: '学生删除成功', intent: 'success' });
       loadStudents();
     } catch (err: any) {
-      setError(err.response?.data?.error || '删除学生失败');
+      showToast({ title: '删除失败', body: err.response?.data?.error || '删除学生失败', intent: 'error' });
     }
   };
 
   const handleSubmitAdd = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
 
     try {
       await studentAPI.create({
@@ -205,18 +202,17 @@ const StudentsPageEnhanced: React.FC = () => {
         name: formData.name,
         studentClass: formData.class,
       });
-      setSuccess('学生添加成功');
+      showToast({ title: '添加成功', body: '学生添加成功', intent: 'success' });
       setAddDialogOpen(false);
       loadStudents();
     } catch (err: any) {
-      setError(err.response?.data?.error || '添加学生失败');
+      showToast({ title: '添加失败', body: err.response?.data?.error || '添加学生失败', intent: 'error' });
     }
   };
 
   const handleSubmitEdit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!currentStudent) return;
-    setError('');
 
     try {
       await studentAPI.update(currentStudent.id, {
@@ -224,11 +220,11 @@ const StudentsPageEnhanced: React.FC = () => {
         name: formData.name,
         studentClass: formData.class,
       });
-      setSuccess('学生更新成功');
+      showToast({ title: '更新成功', body: '学生更新成功', intent: 'success' });
       setEditDialogOpen(false);
       loadStudents();
     } catch (err: any) {
-      setError(err.response?.data?.error || '更新学生失败');
+      showToast({ title: '更新失败', body: err.response?.data?.error || '更新学生失败', intent: 'error' });
     }
   };
 
@@ -257,18 +253,6 @@ const StudentsPageEnhanced: React.FC = () => {
           </Button>
         </div>
       </div>
-
-      {error && (
-        <MessageBar intent="error" style={{ marginBottom: '16px' }}>
-          <MessageBarBody>{error}</MessageBarBody>
-        </MessageBar>
-      )}
-
-      {success && (
-        <MessageBar intent="success" style={{ marginBottom: '16px' }}>
-          <MessageBarBody>{success}</MessageBarBody>
-        </MessageBar>
-      )}
 
       {loading && !detailDialogOpen ? (
         <div style={{ textAlign: 'center', padding: '40px' }}>

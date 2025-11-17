@@ -27,6 +27,7 @@ import backupRoutes from './routes/backup';
 import importExportRoutes from './routes/import-export';
 import userConfigRoutes from './routes/userConfig';
 import lectureRecordsRoutes from './routes/lectureRecords';
+import overtimeRoutes from './routes/overtime';
 
 const app = express();
 const PORT = parseInt(process.env.PORT || '3000', 10);
@@ -134,19 +135,31 @@ app.use(cookieParser());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
+// 健康检查接口（在日志中间件之前，不记录日志，不需要认证）
+app.get('/health', (req, res) => {
+  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+// 静默健康检查接口（用于前端检测服务可用性，不记录任何日志）
+app.get('/ping', (req, res) => {
+  res.json({ status: 'ok' });
+});
+
 // Request logging
 app.use((req, res, next) => {
-  logger.info(`${req.method} ${req.path}`, { ip: normalizeIp(req) });
+  // 跳过静默请求和健康检查的日志记录
+  const isSilent = req.headers['x-silent-request'] === 'true';
+  const isHealthCheck = req.path === '/health' || req.path === '/ping';
+  
+  if (!isSilent && !isHealthCheck) {
+    logger.info(`${req.method} ${req.path}`, { ip: normalizeIp(req) });
+  }
+  
   next();
 });
 
 // One-time token validation middleware (applied to all API routes)
 app.use('/api', validateOneTimeToken);
-
-// 健康检查
-app.get('/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
-});
 
 // API 路由
 app.use('/api/auth', authRoutes);
@@ -157,6 +170,7 @@ app.use('/api/backup', backupRoutes);
 app.use('/api/import-export', importExportRoutes);
 app.use('/api/user-config', userConfigRoutes);
 app.use('/api/lecture-records', lectureRecordsRoutes);
+app.use('/api/overtime', overtimeRoutes);
 
 // 404 处理
 app.use(notFoundHandler);
@@ -170,9 +184,7 @@ const server = app.listen(PORT, HOST, () => {
   logger.info(`Server running at http://${HOST}:${PORT}`);
   logger.info('LAN access allowed (localhost + private networks)');
   
-  // Console shows startup message and frontend URL
   console.log('OK Backend service started (LAN access enabled)');
-  console.log(`Frontend URL: ${process.env.FRONTEND_URL || 'http://localhost:5173'}`);
 });
 
 // Graceful shutdown

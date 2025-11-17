@@ -24,16 +24,44 @@ const apiClient = axios.create({
   withCredentials: true, // 允许发送和接收 Cookie
 });
 
-// 获取一次性token的函数
+// 令牌缓存机制
+let tokenCache: string | null = null;
+let tokenExpiry: number = 0;
+const TOKEN_LIFETIME = 8000; // 令牌有效期 8 秒（后端是 10 秒，留 2 秒余量）
+
+// 获取一次性token的函数（带缓存）
 async function getOneTimeToken(): Promise<string> {
+  const now = Date.now();
+  
+  // 如果缓存的令牌仍然有效，直接返回
+  if (tokenCache && now < tokenExpiry) {
+    return tokenCache as string;
+  }
+  
   try {
-    const response = await axios.get(`${API_BASE_URL}/auth/token`);
-    return response.data.token;
+    // 使用静默的 axios 实例（不触发拦截器）
+    const response = await axios.get(`${API_BASE_URL}/auth/token`, {
+      withCredentials: true,
+      // 添加标记，避免在日志中显示（Express 会自动转为小写）
+      headers: {
+        'x-silent-request': 'true'
+      }
+    });
+    
+    tokenCache = response.data.token;
+    tokenExpiry = now + TOKEN_LIFETIME;
+    
+    return tokenCache as string;
   } catch (error) {
-    console.error('获取一次性token失败:', error);
+    // 静默失败，不在控制台显示错误
+    tokenCache = null;
+    tokenExpiry = 0;
     throw error;
   }
 }
+
+// 导出获取令牌的函数，供其他模块使用
+export { getOneTimeToken };
 
 // 请求拦截器 - 自动添加一次性token和备用身份验证
 apiClient.interceptors.request.use(
@@ -56,8 +84,7 @@ apiClient.interceptors.request.use(
         const oneTimeToken = await getOneTimeToken();
         config.headers['x-request-token'] = oneTimeToken;
       } catch (error) {
-        console.error('无法获取请求token:', error);
-        // 继续请求，让后端返回403
+        // 静默失败，继续请求，让后端返回403
       }
     }
     
@@ -72,9 +99,64 @@ apiClient.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
+// 用于检测服务器重启的标志
+let serverWasDown = false;
+let isRefreshing = false;
+
+// 服务器健康检查函数（使用 /ping 接口，不记录日志）
+async function checkServerHealth(): Promise<boolean> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/ping`, {
+      method: 'GET',
+      signal: AbortSignal.timeout(2000) // 2秒超时
+    });
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
+// 定期检查服务器健康的函数
+let healthCheckInterval: number | null = null;
+
+function startHealthCheck() {
+  if (healthCheckInterval) return; // 避免重复启动
+  
+  console.log('⏱️ 开始轮询服务器状态...');
+  
+  healthCheckInterval = window.setInterval(async () => {
+    const isHealthy = await checkServerHealth();
+    
+    if (isHealthy && serverWasDown && !isRefreshing) {
+      // 服务器恢复了
+      isRefreshing = true;
+      if (healthCheckInterval) {
+        clearInterval(healthCheckInterval);
+        healthCheckInterval = null;
+      }
+      console.log('🔄 服务器已恢复，自动刷新页面...');
+      window.location.reload();
+    }
+  }, 3000); // 每3秒检查一次
+}
+
+function stopHealthCheck() {
+  if (healthCheckInterval) {
+    clearInterval(healthCheckInterval);
+    healthCheckInterval = null;
+  }
+}
+
 // 响应拦截器 - 处理错误
 apiClient.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    // 如果服务器恢复，停止健康检查
+    if (serverWasDown) {
+      serverWasDown = false;
+      stopHealthCheck();
+    }
+    return response;
+  },
   (error) => {
     // 处理认证错误
     if (error.response?.status === 401) {
@@ -99,18 +181,16 @@ apiClient.interceptors.response.use(
           error.message?.includes('timeout') ||
           error.message?.includes('ERR_CONNECTION_REFUSED')) {
         
-        console.error('后端服务不可用，自动退出登录:', error.message);
+        console.log('⚠️ 检测到服务器连接中断，开始监控服务器状态');
         
-        // 清除本地认证信息
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
-        localStorage.removeItem('lastActivity');
-        localStorage.removeItem('encryptedCookie');
+        // 标记服务器不可用，但不清除认证信息，也不跳转
+        serverWasDown = true;
         
-        // 跳转到登录页
-        if (window.location.pathname !== '/login') {
-          window.location.href = '/login';
-        }
+        // 开始定期检查服务器健康（使用静默的 /ping 接口）
+        startHealthCheck();
+        
+        // 不再自动退出登录和跳转，等待服务器恢复后自动刷新
+        // 这样用户的登录状态和当前页面都会被保留
       }
     }
     
@@ -229,8 +309,11 @@ export const backupAPI = {
 export const importExportAPI = {
   exportStudentsExcel: () => 
     apiClient.get('/import-export/students/excel', { responseType: 'blob' }),
-  exportScoresExcel: () => 
-    apiClient.get('/import-export/scores/excel', { responseType: 'blob' }),
+  exportScoresExcel: (params?: { startDate?: string; endDate?: string }) => 
+    apiClient.get('/import-export/scores/excel', { 
+      params,
+      responseType: 'blob' 
+    }),
   // 上传并解析文件
   parseFile: (file: File) => {
     const formData = new FormData();
@@ -273,6 +356,7 @@ export const lectureRecordsAPI = {
     teachingTeacherName: string;
     className: string;
     date?: string;
+    period?: number;
     notes?: string;
   }) => apiClient.post('/lecture-records', data),
   
@@ -281,6 +365,7 @@ export const lectureRecordsAPI = {
     teachingTeacherName: string;
     className: string;
     date: string;
+    period?: number;
     notes?: string;
   }) => apiClient.put(`/lecture-records/${id}`, data),
   
@@ -298,6 +383,50 @@ export const lectureRecordsAPI = {
   },
   
   getStatistics: () => apiClient.get('/lecture-records/statistics'),
+};
+
+// 加班记录 API
+export const overtimeRecordsAPI = {
+  getAll: (params?: { startDate?: string; endDate?: string }) => 
+    apiClient.get('/overtime', { params }),
+  
+  getGrouped: () => apiClient.get('/overtime/grouped'),
+  
+  getDetail: (position: string, teacherName: string) => 
+    apiClient.get('/overtime/detail', { 
+      params: { position, teacher_name: teacherName } 
+    }),
+
+  getDetailById: (teacherId: number) =>
+    apiClient.get('/overtime/detail-by-id', { params: { teacher_id: teacherId } }),
+  
+  importNamelist: (data: FormData | { text: string }) => {
+    if (data instanceof FormData) {
+      return apiClient.post('/overtime/import-namelist', data, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+    }
+    return apiClient.post('/overtime/import-namelist', data);
+  },
+  
+  importData: (data: FormData | { text: string; ai?: boolean }) => {
+    if (data instanceof FormData) {
+      return apiClient.post('/overtime/import-data', data, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+    }
+    return apiClient.post('/overtime/import-data', data);
+  },
+  
+  importAiParsed: (data: { data: any[], defaultTimePoint?: string }) => 
+    apiClient.post('/overtime/import-ai-parsed', data),
+  
+  export: async (params: { date: string }) => {
+    const response = await apiClient.post('/overtime/export', params, { responseType: 'blob' });
+    return response;
+  },
+  
+  getTimePoints: () => apiClient.get('/overtime/time-points'),
 };
 
 export default apiClient;

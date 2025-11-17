@@ -12,8 +12,6 @@ import {
   Input,
   Label,
   makeStyles,
-  MessageBar,
-  MessageBarBody,
   Card,
   Title2,
   Title3,
@@ -29,6 +27,7 @@ import {
 } from '@fluentui/react-components';
 import { Add20Regular, CheckmarkCircle20Regular, DismissCircle20Regular } from '@fluentui/react-icons';
 import { studentAPI, scoreAPI } from '../services/api';
+import { useToast } from '../utils/toast';
 
 const useStyles = makeStyles({
   container: {
@@ -91,12 +90,11 @@ interface Student {
 }
 
 const PendingRecordsPage: React.FC = () => {
+  const { showToast } = useToast();
   const styles = useStyles();
   const [pendingRecords, setPendingRecords] = useState<PendingRecord[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
   const [selectedRecords, setSelectedRecords] = useState<Set<number>>(new Set());
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
   const [, setLoading] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editingRecord, setEditingRecord] = useState<PendingRecord | null>(null);
@@ -126,8 +124,7 @@ const PendingRecordsPage: React.FC = () => {
       setLoading(false);
     } catch (err) {
       console.error('加载待处理记录失败:', err);
-      setError('加载待处理记录失败');
-      setTimeout(() => setError(''), 3000);
+      showToast({ title: '错误', body: '加载待处理记录失败', intent: 'error' });
       setLoading(false);
     }
   };
@@ -197,7 +194,7 @@ const PendingRecordsPage: React.FC = () => {
   // 保存编辑（直接处理并添加到scores表）
   const handleSaveEdit = async () => {
     if (!editForm.studentName.trim()) {
-      setError('请输入学生姓名');
+      showToast({ title: '错误', body: '请输入学生姓名', intent: 'error' });
       return;
     }
 
@@ -209,7 +206,7 @@ const PendingRecordsPage: React.FC = () => {
     );
 
     if (!matchedStudent) {
-      setError('未找到匹配的学生，请确认学生姓名或学号');
+      showToast({ title: '错误', body: '未找到匹配的学生，请确认学生姓名或学号', intent: 'error' });
       return;
     }
 
@@ -225,22 +222,18 @@ const PendingRecordsPage: React.FC = () => {
       await scoreAPI.resolvePending(editingRecord!.id!, matchedStudent.id);
       
       setEditDialogOpen(false);
-      setSuccess('记录已处理并添加到量化记录');
-      setTimeout(() => setSuccess(''), 3000);
-      
+      showToast({ title: '成功', body: '记录已处理并添加到量化记录', intent: 'success' });
       // 重新加载待处理记录列表
       await loadPendingRecords();
     } catch (err: any) {
-      setError(err.response?.data?.error || '处理记录失败');
-      setTimeout(() => setError(''), 3000);
-    }
+      showToast({ title: '错误', body: err.response?.data?.error || '处理记录失败', intent: 'error' });
+      }
   };
 
   // 批量添加到数据库
   const handleBatchAdd = async () => {
     if (selectedRecords.size === 0) {
-      setError('请至少选择一条记录');
-      setTimeout(() => setError(''), 3000);
+      showToast({ title: '错误', body: '请至少选择一条记录', intent: 'error' });
       return;
     }
 
@@ -249,8 +242,7 @@ const PendingRecordsPage: React.FC = () => {
     // 验证所有记录都有学生姓名
     const invalidRecords = recordsToAdd.filter(r => !r.studentName || !r.studentName.trim());
     if (invalidRecords.length > 0) {
-      setError('部分记录缺少学生姓名，请先编辑补充');
-      setTimeout(() => setError(''), 3000);
+      showToast({ title: '错误', body: '部分记录缺少学生姓名，请先编辑补充', intent: 'error' });
       return;
     }
 
@@ -295,22 +287,19 @@ const PendingRecordsPage: React.FC = () => {
       setSelectedRecords(new Set());
 
       if (failCount === 0) {
-        setSuccess(`成功添加 ${successCount} 条记录到数据库`);
+        showToast({ title: "成功", body: `成功添加 ${successCount} 条记录到数据库`, intent: "success" });
       } else {
-        setSuccess(`成功添加 ${successCount} 条记录，${failCount} 条失败`);
+        showToast({ title: "成功", body: `成功添加 ${successCount} 条记录，${failCount} 条失败`, intent: "success" });
       }
-      setTimeout(() => setSuccess(''), 5000);
-    } catch (err: any) {
-      setError(err.message || '批量添加失败');
-      setTimeout(() => setError(''), 3000);
-    }
+      } catch (err: any) {
+      showToast({ title: '错误', body: err.message || '批量添加失败', intent: 'error' });
+      }
   };
 
   // 批量舍弃
   const handleBatchDiscard = async () => {
     if (selectedRecords.size === 0) {
-      setError('请至少选择一条记录');
-      setTimeout(() => setError(''), 3000);
+      showToast({ title: '错误', body: '请至少选择一条记录', intent: 'error' });
       return;
     }
 
@@ -325,12 +314,10 @@ const PendingRecordsPage: React.FC = () => {
       await loadPendingRecords();
       setSelectedRecords(new Set());
       
-      setSuccess(`已舍弃 ${selectedRecords.size} 条记录`);
-      setTimeout(() => setSuccess(''), 3000);
-    } catch (err: any) {
-      setError(err.response?.data?.error || '批量舍弃失败');
-      setTimeout(() => setError(''), 3000);
-    }
+      showToast({ title: "成功", body: `已舍弃 ${selectedRecords.size} 条记录`, intent: "success" });
+      } catch (err: any) {
+      showToast({ title: '错误', body: err.response?.data?.error || '批量舍弃失败', intent: 'error' });
+      }
   };
 
   // 自动匹配学生
@@ -350,12 +337,10 @@ const PendingRecordsPage: React.FC = () => {
         studentId: matchedStudent.student_id,
         class: matchedStudent.class,
       });
-      setSuccess('自动匹配成功');
-      setTimeout(() => setSuccess(''), 2000);
-    } else {
-      setError('未找到匹配的学生');
-      setTimeout(() => setError(''), 2000);
-    }
+      showToast({ title: '成功', body: '自动匹配成功', intent: 'success' });
+      } else {
+      showToast({ title: '错误', body: '未找到匹配的学生', intent: 'error' });
+      }
   };
 
   const columns: TableColumnDefinition<PendingRecord>[] = [
@@ -430,17 +415,6 @@ const PendingRecordsPage: React.FC = () => {
 
   return (
     <div className={styles.container}>
-      {error && (
-        <MessageBar intent="error">
-          <MessageBarBody>{error}</MessageBarBody>
-        </MessageBar>
-      )}
-      {success && (
-        <MessageBar intent="success">
-          <MessageBarBody>{success}</MessageBarBody>
-        </MessageBar>
-      )}
-
       <div className={styles.header}>
         <Title2>待处理记录</Title2>
         <div className={styles.headerButtons}>

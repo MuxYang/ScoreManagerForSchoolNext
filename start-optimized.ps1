@@ -1,8 +1,8 @@
-# Student Score Management System - Production Startup Script
+﻿# Student Score Management System - Production Startup Script
 # Builds and runs the system in production mode
 
 Write-Host "========================================" -ForegroundColor Cyan
-Write-Host "   Student Score System - Production Mode" -ForegroundColor Cyan
+Write-Host " Student Score System - Production Mode" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
 
@@ -11,18 +11,21 @@ function Stop-ProcessByPort {
         [Parameter(Mandatory=$true)]
         [int]$Port
     )
-    Write-Host "Attempting to stop processes on port $Port..." -ForegroundColor Yellow
-    Get-NetTCPConnection -LocalPort $Port | ForEach-Object {
-        $procId = $_.OwningProcess
+    Write-Host "检查端口 $Port..." -ForegroundColor Yellow
+    $conn = Get-NetTCPConnection -LocalPort $Port -ErrorAction SilentlyContinue
+    if ($conn) {
+        $procId = $conn.OwningProcess
         if ($procId -ne 0) {
             try {
                 Stop-Process -Id $procId -Force -ErrorAction SilentlyContinue
-                Write-Host "Stopped process with PID $procId on port $Port." -ForegroundColor Green
+                Write-Host "已停止端口 $Port 的进程 (PID: $procId)" -ForegroundColor Green
             } catch {
                 $errMsg = $error[0].Exception.Message
-                Write-Host ('Failed to stop process with PID ' + $procId + ' on port ' + $Port + ': ' + $errMsg) -ForegroundColor Red
+                Write-Host "停止端口 $Port 的进程失败 (PID: $procId): $errMsg" -ForegroundColor Red
             }
         }
+    } else {
+        Write-Host "端口 $Port 没有运行的进程" -ForegroundColor Gray
     }
 }
 
@@ -35,7 +38,7 @@ try {
     Write-Host "Node.js is not installed or not in PATH." -ForegroundColor Red
     $title = "Node.js Installation"
     $message = "Do you want to automatically download and install Node.js?"
-    $choices = [System.Management.Automation.Host.ChoiceDescription[]]@("&Yes", "&No")
+    $choices = [System.Management.Automation.Host.ChoiceDescription[]]@("Yes", "No")
     $decision = $Host.UI.PromptForChoice($title, $message, $choices, 0)
 
     if ($decision -eq 0) {
@@ -301,7 +304,7 @@ Write-Host "http://localhost:3000" -ForegroundColor White -BackgroundColor DarkG
 Write-Host ""
 Write-Host "⚡ Performance: " -ForegroundColor Yellow
 Write-Host "  • Backend: Compiled TypeScript (optimized)" -ForegroundColor Gray
-Write-Host "  • Frontend: Built assets (minified & compressed)" -ForegroundColor Gray
+Write-Host "  • Frontend: Built assets (minified and compressed)" -ForegroundColor Gray
 Write-Host "  • Database: SQLite (production-ready)" -ForegroundColor Gray
 Write-Host ""
 Write-Host "🔒 Network Access: " -ForegroundColor Yellow
@@ -341,8 +344,8 @@ Write-Host "   Real-time System Logs" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "📋 Log Format:" -ForegroundColor Yellow
-Write-Host "  [BACKEND]  - Backend service logs (API, database, system)" -ForegroundColor Blue
-Write-Host "  [FRONTEND] - Frontend service logs (HTTP requests, errors)" -ForegroundColor Cyan
+Write-Host "  [BACKEND]  - Backend service logs (API database system)" -ForegroundColor Blue
+Write-Host "  [FRONTEND] - Frontend service logs (HTTP requests errors)" -ForegroundColor Cyan
 Write-Host "  [BACKEND ERROR] - Backend error logs" -ForegroundColor Red
 Write-Host ""
 Write-Host "🎨 Color Legend:" -ForegroundColor Yellow

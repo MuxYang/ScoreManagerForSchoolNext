@@ -3,8 +3,6 @@ import {
   Button,
   Card,
   makeStyles,
-  MessageBar,
-  MessageBarBody,
   Spinner,
   Label,
   Select,
@@ -16,6 +14,7 @@ import {
 } from '@fluentui/react-components';
 import { ArrowUpload20Regular, DocumentArrowUp20Regular, Checkmark20Regular } from '@fluentui/react-icons';
 import { importExportAPI } from '../services/api';
+import { useToast } from '../utils/toast';
 
 const useStyles = makeStyles({
   container: {
@@ -83,12 +82,11 @@ interface ColumnMapping {
 }
 
 const DataImportPage: React.FC = () => {
+  const { showToast } = useToast();
   const styles = useStyles();
   const [importType, setImportType] = useState<'students' | 'teachers'>('students');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
   
   // 解析后的数据
   const [headers, setHeaders] = useState<string[]>([]);
@@ -119,7 +117,7 @@ const DataImportPage: React.FC = () => {
     if (file) {
       const extension = file.name.toLowerCase().split('.').pop();
       if (!['csv', 'xls', 'xlsx'].includes(extension || '')) {
-        setError('不支持的文件格式，请使用 CSV、XLS 或 XLSX 格式');
+        showToast({ title: '错误', body: '不支持的文件格式，请使用 CSV、XLS 或 XLSX 格式', intent: 'error' });
         return;
       }
       setSelectedFile(file);
@@ -134,7 +132,6 @@ const DataImportPage: React.FC = () => {
   const parseFile = async (file: File) => {
     try {
       setLoading(true);
-      setError('');
       const response = await importExportAPI.parseFile(file);
       
       setHeaders(response.data.headers);
@@ -144,9 +141,9 @@ const DataImportPage: React.FC = () => {
       // 自动映射（尝试智能匹配）
       autoMapColumns(response.data.headers);
       
-      setSuccess(`文件解析成功！共 ${response.data.totalRows} 行数据`);
+      showToast({ title: "成功", body: `文件解析成功！共 ${response.data.totalRows} 行数据`, intent: "success" });
     } catch (err: any) {
-      setError(err.response?.data?.error || '文件解析失败');
+      showToast({ title: '错误', body: err.response?.data?.error || '文件解析失败', intent: 'error' });
       setSelectedFile(null);
     } finally {
       setLoading(false);
@@ -190,7 +187,7 @@ const DataImportPage: React.FC = () => {
     const requiredFields = currentFields.filter(f => f.required);
     for (const field of requiredFields) {
       if (!columnMapping[field.key]) {
-        setError(`请为必填字段 "${field.label}" 选择对应的列`);
+        showToast({ title: '验证失败', body: `请为必填字段 "${field.label}" 选择对应的列`, intent: 'warning' });
         return false;
       }
     }
@@ -204,8 +201,6 @@ const DataImportPage: React.FC = () => {
 
     try {
       setLoading(true);
-      setError('');
-      
       let response;
       if (importType === 'students') {
         response = await importExportAPI.importStudents(allData, columnMapping);
@@ -213,7 +208,7 @@ const DataImportPage: React.FC = () => {
         response = await importExportAPI.importTeachers(allData, columnMapping);
       }
       
-      setSuccess(response.data.message);
+      showToast({ title: '导入成功', body: response.data.message, intent: 'success' });
       
       // 显示导入结果
       if (response.data.errors && response.data.errors.length > 0) {
@@ -230,7 +225,7 @@ const DataImportPage: React.FC = () => {
       }, 3000);
       
     } catch (err: any) {
-      setError(err.response?.data?.error || '导入失败');
+      showToast({ title: '错误', body: err.response?.data?.error || '导入失败', intent: 'error' });
     } finally {
       setLoading(false);
     }
@@ -284,18 +279,6 @@ const DataImportPage: React.FC = () => {
         <Subtitle1>数据导入</Subtitle1>
         <Body1>上传 CSV、XLS 或 XLSX 文件以批量导入数据</Body1>
       </div>
-
-      {error && (
-        <MessageBar intent="error" style={{ marginBottom: '16px' }}>
-          <MessageBarBody>{error}</MessageBarBody>
-        </MessageBar>
-      )}
-
-      {success && (
-        <MessageBar intent="success" style={{ marginBottom: '16px' }}>
-          <MessageBarBody>{success}</MessageBarBody>
-        </MessageBar>
-      )}
 
       {/* 导入类型选择 */}
       <TabList
@@ -406,9 +389,7 @@ const DataImportPage: React.FC = () => {
                     setPreviewData([]);
                     setAllData([]);
                     setColumnMapping({});
-                    setError('');
-                    setSuccess('');
-                  }}
+                    }}
                 >
                   重置
                 </Button>

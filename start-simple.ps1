@@ -1,9 +1,27 @@
-# 简化的启动脚本
+﻿# 简化的启动脚本
 Write-Host "启动学生积分管理系统..." -ForegroundColor Green
 
 # 停止现有进程
 Write-Host "停止现有服务..." -ForegroundColor Yellow
-Get-Process | Where-Object {$_.ProcessName -eq "node"} | Stop-Process -Force -ErrorAction SilentlyContinue
+
+# 停止端口 3000 (后端)
+$conn3000 = Get-NetTCPConnection -LocalPort 3000 -ErrorAction SilentlyContinue
+if ($conn3000) { 
+    Stop-Process -Id $conn3000.OwningProcess -Force -ErrorAction SilentlyContinue
+    Write-Host "已停止端口 3000 的进程" -ForegroundColor Green
+} else { 
+    Write-Host "端口 3000 没有运行的进程" -ForegroundColor Gray
+}
+
+# 停止端口 4173 (前端预览)
+$conn4173 = Get-NetTCPConnection -LocalPort 4173 -ErrorAction SilentlyContinue
+if ($conn4173) { 
+    Stop-Process -Id $conn4173.OwningProcess -Force -ErrorAction SilentlyContinue
+    Write-Host "已停止端口 4173 的进程" -ForegroundColor Green
+} else { 
+    Write-Host "端口 4173 没有运行的进程" -ForegroundColor Gray
+}
+
 Start-Sleep -Seconds 2
 
 # 启动后端

@@ -43,6 +43,7 @@ import LectureRecordsPage from './LectureRecordsPage';
 import NotFoundPage from './NotFoundPage';
 import MobileTestPage from './MobileTestPage';
 import SimpleMobileTest from './SimpleMobileTest';
+import OvertimeRecordsPage from './OvertimeRecordsPage';
 import DebugMobile from './DebugMobile';
 
 const useStyles = makeStyles({
@@ -218,6 +219,7 @@ const DashboardPage: React.FC = () => {
     { path: '/', label: '首页', icon: <Home20Regular /> },
     { path: '/scores', label: '量化管理', icon: <Trophy20Regular /> },
     { path: '/lecture-records', label: '教师听课记录', icon: <BookTemplate20Regular /> },
+    { path: '/overtime-records', label: '加班记录管理', icon: <ClockRegular /> },
     { path: '/pending', label: '待处理记录', icon: <ClockRegular /> },
     { path: '/students', label: '学生管理', icon: <People20Regular /> },
     { path: '/teachers', label: '教师管理', icon: <PersonBoard20Regular /> },
@@ -296,7 +298,7 @@ const DashboardPage: React.FC = () => {
               className={styles.mobileMenuButton}
             />
           )}
-          <Title2 className={styles.title}>学生量化管理系统</Title2>
+          <Title2 className={styles.title}>综合量化管理系统</Title2>
         </div>
         <div className={styles.nav}>
           <Body1 className={styles.userInfo}>欢迎，{user?.username}</Body1>
@@ -373,6 +375,7 @@ const DashboardPage: React.FC = () => {
               <Route path="/teachers" element={<TeachersPageComplete />} />
               <Route path="/scores" element={<ScoresPageEnhanced />} />
               <Route path="/lecture-records" element={<LectureRecordsPage />} />
+              <Route path="/overtime-records" element={<OvertimeRecordsPage />} />
               <Route path="/pending" element={<PendingRecordsPage />} />
               <Route path="/import" element={<DataImportPage />} />
               {user?.isAdmin && <Route path="/backup" element={<BackupPage />} />}

@@ -21,13 +21,12 @@ import {
   Label,
   makeStyles,
   Spinner,
-  MessageBar,
-  MessageBarBody,
   Textarea,
   Field,
 } from '@fluentui/react-components';
 import { Add20Regular, Delete20Regular, Edit20Regular, ArrowImport20Regular, ArrowExport20Regular } from '@fluentui/react-icons';
 import { studentAPI } from '../services/api';
+import { useToast } from '../utils/toast';
 
 const useStyles = makeStyles({
   container: {
@@ -67,11 +66,10 @@ interface Student {
 
 const StudentsPage: React.FC = () => {
   const styles = useStyles();
+  const { showToast } = useToast();
   // const navigate = useNavigate();
   const [students, setStudents] = useState<Student[]>([]);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
@@ -103,7 +101,11 @@ const StudentsPage: React.FC = () => {
       const response = await studentAPI.getAll();
       setStudents(response.data);
     } catch (err: any) {
-      setError(err.response?.data?.error || '加载学生列表失败');
+      showToast({ 
+        title: '加载失败', 
+        body: err.response?.data?.error || '加载学生列表失败', 
+        intent: 'error' 
+      });
     } finally {
       setLoading(false);
     }
@@ -130,17 +132,15 @@ const StudentsPage: React.FC = () => {
 
     try {
       await studentAPI.delete(id);
-      setSuccess('学生删除成功');
+      showToast({ title: '删除成功', body: '学生已删除', intent: 'success' });
       loadStudents();
     } catch (err: any) {
-      setError(err.response?.data?.error || '删除学生失败');
+      showToast({ title: '删除失败', body: err.response?.data?.error || '删除学生失败', intent: 'error' });
     }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
-    setSuccess('');
 
     try {
       if (editingStudent) {
@@ -149,27 +149,24 @@ const StudentsPage: React.FC = () => {
           name: formData.name,
           studentClass: formData.class,
         });
-        setSuccess('学生更新成功');
+        showToast({ title: '更新成功', body: '学生信息已更新', intent: 'success' });
       } else {
         await studentAPI.create({
           studentId: formData.student_id,
           name: formData.name,
           studentClass: formData.class,
         });
-        setSuccess('学生添加成功');
+        showToast({ title: '添加成功', body: '学生已添加', intent: 'success' });
       }
       setDialogOpen(false);
       loadStudents();
     } catch (err: any) {
-      setError(err.response?.data?.error || '操作失败');
+      showToast({ title: '操作失败', body: err.response?.data?.error || '操作失败', intent: 'error' });
     }
   };
 
   // 处理导入
   const handleImport = async () => {
-    setError('');
-    setSuccess('');
-    
     try {
       const lines = importData.trim().split('\n');
       const students = lines.map(line => {
@@ -178,7 +175,7 @@ const StudentsPage: React.FC = () => {
       }).filter(s => s.studentId && s.name && s.studentClass);
 
       if (students.length === 0) {
-        setError('没有有效的学生数据');
+        showToast({ title: '导入失败', body: '没有有效的学生数据', intent: 'warning' });
         return;
       }
 
@@ -187,19 +184,17 @@ const StudentsPage: React.FC = () => {
         await studentAPI.create(student);
       }
 
-      setSuccess(`成功导入 ${students.length} 个学生`);
+      showToast({ title: '导入成功', body: `成功导入 ${students.length} 个学生`, intent: 'success' });
       setImportDialogOpen(false);
       setImportData('');
       loadStudents();
     } catch (err: any) {
-      setError(err.response?.data?.error || '导入失败');
+      showToast({ title: '导入失败', body: err.response?.data?.error || '导入失败', intent: 'error' });
     }
   };
 
   // 处理导出
   const handleExport = () => {
-    setError('');
-    
     let exportStudents = [...students];
     
     // 如果指定了日期范围，根据创建时间筛选（这里简化处理，实际应该在API中实现）
@@ -231,7 +226,7 @@ const StudentsPage: React.FC = () => {
     link.click();
     document.body.removeChild(link);
 
-    setSuccess(`成功导出 ${exportStudents.length} 个学生`);
+    showToast({ title: '导出成功', body: `成功导出 ${exportStudents.length} 个学生`, intent: 'success' });
     setExportDialogOpen(false);
   };
 
@@ -303,18 +298,6 @@ const StudentsPage: React.FC = () => {
           </Button>
         </div>
       </div>
-
-      {error && (
-        <MessageBar intent="error" style={{ marginBottom: '16px' }}>
-          <MessageBarBody>{error}</MessageBarBody>
-        </MessageBar>
-      )}
-
-      {success && (
-        <MessageBar intent="success" style={{ marginBottom: '16px' }}>
-          <MessageBarBody>{success}</MessageBarBody>
-        </MessageBar>
-      )}
 
       {loading ? (
         <Spinner label="加载中..." />

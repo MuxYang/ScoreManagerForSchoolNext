@@ -177,19 +177,21 @@ const logger = winston.createLogger({
       filename: SESSION_LOG_FILE,
       format: detailedLogFormat,
       level: 'info', // Exclude debug level
+      options: { encoding: 'utf8' },
     }),
     // Current session's error log file (detailed format)
     new winston.transports.File({
       filename: SESSION_ERROR_FILE,
       format: detailedLogFormat,
       level: 'error', // Only record errors
+      options: { encoding: 'utf8' },
     }),
   ],
 });
 
 // Log session startup info
 logger.info('='.repeat(80));
-logger.info(`Log Session started: ${SESSION_TIMESTAMP}`);
+logger.info(`Log session started: ${SESSION_TIMESTAMP}`);
 logger.info(`Log file: ${SESSION_LOG_FILE}`);
 logger.info(`Error log file: ${SESSION_ERROR_FILE}`);
 logger.info(`Log level: ${LOG_LEVEL}`);

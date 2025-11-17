@@ -20,13 +20,12 @@ import {
   Label,
   makeStyles,
   Spinner,
-  MessageBar,
-  MessageBarBody,
   Textarea,
   Field,
 } from '@fluentui/react-components';
 import { Add20Regular, Delete20Regular, Edit20Regular, ArrowImport20Regular, ArrowExport20Regular } from '@fluentui/react-icons';
 import { studentAPI } from '../services/api';
+import { useToast } from '../utils/toast';
 
 const useStyles = makeStyles({
   container: {
@@ -66,11 +65,10 @@ interface Student {
 }
 
 const StudentsPage: React.FC = () => {
+  const { showToast } = useToast();
   const styles = useStyles();
   const [students, setStudents] = useState<Student[]>([]);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
@@ -102,7 +100,7 @@ const StudentsPage: React.FC = () => {
       const response = await studentAPI.getAll();
       setStudents(response.data);
     } catch (err: any) {
-      setError(err.response?.data?.error || '加载学生列表失败');
+      showToast({ title: '错误', body: err.response?.data?.error || '加载学生列表失败', intent: 'error' });
     } finally {
       setLoading(false);
     }
@@ -129,18 +127,15 @@ const StudentsPage: React.FC = () => {
 
     try {
       await studentAPI.delete(id);
-      setSuccess('学生删除成功');
+      showToast({ title: '成功', body: '学生删除成功', intent: 'success' });
       loadStudents();
     } catch (err: any) {
-      setError(err.response?.data?.error || '删除学生失败');
+      showToast({ title: '错误', body: err.response?.data?.error || '删除学生失败', intent: 'error' });
     }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
-    setSuccess('');
-
     try {
       if (editingStudent) {
         await studentAPI.update(editingStudent.id, {
@@ -148,27 +143,24 @@ const StudentsPage: React.FC = () => {
           name: formData.name,
           studentClass: formData.class,
         });
-        setSuccess('学生更新成功');
+        showToast({ title: '成功', body: '学生更新成功', intent: 'success' });
       } else {
         await studentAPI.create({
           studentId: formData.student_id,
           name: formData.name,
           studentClass: formData.class,
         });
-        setSuccess('学生添加成功');
+        showToast({ title: '成功', body: '学生添加成功', intent: 'success' });
       }
       setDialogOpen(false);
       loadStudents();
     } catch (err: any) {
-      setError(err.response?.data?.error || '操作失败');
+      showToast({ title: '错误', body: err.response?.data?.error || '操作失败', intent: 'error' });
     }
   };
 
   // 处理导入
   const handleImport = async () => {
-    setError('');
-    setSuccess('');
-    
     try {
       const lines = importData.trim().split('\n');
       const students = lines.map(line => {
@@ -177,7 +169,7 @@ const StudentsPage: React.FC = () => {
       }).filter(s => s.studentId && s.name && s.studentClass);
 
       if (students.length === 0) {
-        setError('没有有效的学生数据');
+        showToast({ title: '错误', body: '没有有效的学生数据', intent: 'error' });
         return;
       }
 
@@ -186,27 +178,25 @@ const StudentsPage: React.FC = () => {
         await studentAPI.create(student);
       }
 
-      setSuccess(`成功导入 ${students.length} 个学生`);
+      showToast({ title: "成功", body: `成功导入 ${students.length} 个学生`, intent: "success" });
       setImportDialogOpen(false);
       setImportData('');
       loadStudents();
     } catch (err: any) {
-      setError(err.response?.data?.error || '导入失败');
+      showToast({ title: '错误', body: err.response?.data?.error || '导入失败', intent: 'error' });
     }
   };
 
   // 处理导出
   // 处理导出学生量化记录
   const handleExport = async () => {
-    setError('');
-    
     if (!exportStartDate || !exportEndDate) {
-      setError('请选择开始日期和结束日期');
+      showToast({ title: '错误', body: '请选择开始日期和结束日期', intent: 'error' });
       return;
     }
 
     if (exportStartDate > exportEndDate) {
-      setError('开始日期不能晚于结束日期');
+      showToast({ title: '错误', body: '开始日期不能晚于结束日期', intent: 'error' });
       return;
     }
 
@@ -229,7 +219,7 @@ const StudentsPage: React.FC = () => {
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
 
-      setSuccess(`成功导出学生量化记录`);
+      showToast({ title: "成功", body: `成功导出学生量化记录`, intent: "success" });
       setExportDialogOpen(false);
       setExportStartDate('');
       setExportEndDate('');
@@ -249,7 +239,7 @@ const StudentsPage: React.FC = () => {
         errorMessage = err.response.data.error;
       }
       
-      setError(errorMessage);
+      showToast({ title: '错误', body: errorMessage, intent: 'error' });
     } finally {
       setLoading(false);
     }
@@ -332,18 +322,6 @@ const StudentsPage: React.FC = () => {
           </Button>
         </div>
       </div>
-
-      {error && (
-        <MessageBar intent="error" style={{ marginBottom: '16px' }}>
-          <MessageBarBody>{error}</MessageBarBody>
-        </MessageBar>
-      )}
-
-      {success && (
-        <MessageBar intent="success" style={{ marginBottom: '16px' }}>
-          <MessageBarBody>{success}</MessageBarBody>
-        </MessageBar>
-      )}
 
       {loading ? (
         <Spinner label="加载中..." />
@@ -499,13 +477,9 @@ const StudentsPage: React.FC = () => {
                     onChange={(e) => setExportEndDate(e.target.value)}
                   />
                 </Field>
-                <MessageBar intent="info">
-                  <MessageBarBody>
-                    <div>• 将导出为 Excel (XLSX) 格式文件</div>
+                <div style={{ padding: "12px", backgroundColor: "var(--colorNeutralBackground3)", borderRadius: "4px", marginTop: "12px" }}><div>• 将导出为 Excel (XLSX) 格式文件</div>
                     <div>• 仅包含有量化记录的学生</div>
-                    <div>• 包含班级、姓名、学号及详细量化记录</div>
-                  </MessageBarBody>
-                </MessageBar>
+                    <div>• 包含班级、姓名、学号及详细量化记录</div></div>
               </div>
             </DialogContent>
             <DialogActions>

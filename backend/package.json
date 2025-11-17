@@ -1,7 +1,7 @@
 {
   "name": "score-manager-backend",
-  "version": "1.2.0",
-  "description": "学生量化管理系统后端服务",
+  "version": "2.0.0",
+  "description": "综合量化管理系统后端服务",
   "main": "dist/index.js",
   "scripts": {
     "dev": "tsx watch src/index.ts",

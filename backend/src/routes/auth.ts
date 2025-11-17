@@ -38,6 +38,15 @@ const router = express.Router();
 router.get('/token', (req: Request, res: Response) => {
   try {
     const token = generateOneTimeToken();
+    
+    // 检查是否为静默请求（用于避免日志污染）
+    const isSilent = req.headers['x-silent-request'] === 'true';
+    
+    // 只在非静默模式下记录日志
+    if (!isSilent) {
+      logger.info('One-time token generated', { ip: req.ip || 'unknown' });
+    }
+    
     res.json({ token });
   } catch (error) {
     logger.error('Failed to generate token:', error);

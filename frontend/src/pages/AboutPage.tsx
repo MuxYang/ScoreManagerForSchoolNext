@@ -159,7 +159,7 @@ const AboutPage: React.FC = () => {
       {/* 版本信息 */}
       <div style={{ textAlign: 'center', marginTop: '48px', paddingBottom: '32px' }}>
         <Body1 style={{ color: tokens.colorNeutralForeground3, fontSize: '14px' }}>
-          © 2024-2025 {info.author} · Version 1.1.1
+          © 2024-2025 {info.author} · Version 2.0.0
         </Body1>
         <Body1 style={{ color: tokens.colorNeutralForeground3, fontSize: '12px', marginTop: '8px' }}>
           Built with React + TypeScript + Express + SQLite

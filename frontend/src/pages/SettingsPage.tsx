@@ -6,8 +6,6 @@ import {
   Input,
   Button,
   Card,
-  MessageBar,
-  MessageBarBody,
   Tab,
   TabList,
   Switch,
@@ -26,6 +24,7 @@ import {
   tokens,
 } from '@fluentui/react-components';
 import { authAPI, backupAPI } from '../services/api';
+import { useToast } from '../utils/toast';
 import { useAuth } from '../contexts/AuthContext';
 import PageTitle from '../components/PageTitle';
 import { useTheme } from '../contexts/ThemeContext';
@@ -78,6 +77,7 @@ const useStyles = makeStyles({
 });
 
 const SettingsPage: React.FC = () => {
+  const { showToast } = useToast();
   const styles = useStyles();
   const { user } = useAuth();
   const { theme, setTheme } = useTheme();
@@ -85,8 +85,6 @@ const SettingsPage: React.FC = () => {
   const [oldPassword, setOldPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
 
   // 界面设置
   const [fontSize, setFontSize] = useState(localStorage.getItem('fontSize') || 'medium');
@@ -128,13 +126,12 @@ const SettingsPage: React.FC = () => {
   // 加载数据库统计信息
   const loadDatabaseStats = async () => {
     setLoadingStats(true);
-    setError('');
     try {
       const response = await backupAPI.getDatabaseStats();
       setDbStats(response.data);
       setDbStatsDialogOpen(true);
     } catch (err: any) {
-      setError(err.response?.data?.error || '获取数据库统计信息失败');
+      showToast({ title: '错误', body: err.response?.data?.error || '获取数据库统计信息失败', intent: 'error' });
     } finally {
       setLoadingStats(false);
     }
@@ -147,14 +144,11 @@ const SettingsPage: React.FC = () => {
     }
 
     setOptimizing(true);
-    setError('');
-    setSuccess('');
-    
     try {
       await backupAPI.optimizeDatabase();
-      setSuccess('数据库优化成功！');
+      showToast({ title: '成功', body: '数据库优化成功！', intent: 'success' });
     } catch (err: any) {
-      setError(err.response?.data?.error || '数据库优化失败');
+      showToast({ title: '错误', body: err.response?.data?.error || '数据库优化失败', intent: 'error' });
     } finally {
       setOptimizing(false);
     }
@@ -165,12 +159,11 @@ const SettingsPage: React.FC = () => {
     if (!user?.isAdmin) return;
     
     setLoadingUsers(true);
-    setError('');
     try {
       const response = await authAPI.getUsers();
       setUsers(response.data.users);
     } catch (err: any) {
-      setError(err.response?.data?.error || '获取用户列表失败');
+      showToast({ title: '错误', body: err.response?.data?.error || '获取用户列表失败', intent: 'error' });
     } finally {
       setLoadingUsers(false);
     }
@@ -179,24 +172,21 @@ const SettingsPage: React.FC = () => {
   // 创建用户
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
-    setSuccess('');
-
     if (!newUsername || !newUserPassword) {
-      setError('用户名和密码是必填的');
+      showToast({ title: '错误', body: '用户名和密码是必填的', intent: 'error' });
       return;
     }
 
     try {
       await authAPI.createUser(newUsername, newUserPassword, mustChangePassword);
-      setSuccess(`用户 ${newUsername} 创建成功！`);
+      showToast({ title: "成功", body: `用户 ${newUsername} 创建成功！`, intent: "success" });
       setNewUsername('');
       setNewUserPassword('');
       setMustChangePassword(true);
       setCreateUserDialogOpen(false);
       loadUsers(); // 重新加载用户列表
     } catch (err: any) {
-      setError(err.response?.data?.error || '创建用户失败');
+      showToast({ title: '错误', body: err.response?.data?.error || '创建用户失败', intent: 'error' });
     }
   };
 
@@ -205,17 +195,14 @@ const SettingsPage: React.FC = () => {
     e.preventDefault();
     if (!selectedUser || !resetPassword) return;
     
-    setError('');
-    setSuccess('');
-
     try {
       await authAPI.resetUserPassword(selectedUser.id, resetPassword);
-      setSuccess(`用户 ${selectedUser.username} 的密码重置成功！`);
+      showToast({ title: "成功", body: `用户 ${selectedUser.username} 的密码重置成功！`, intent: "success" });
       setResetPassword('');
       setResetPasswordDialogOpen(false);
       setSelectedUser(null);
     } catch (err: any) {
-      setError(err.response?.data?.error || '重置密码失败');
+      showToast({ title: '错误', body: err.response?.data?.error || '重置密码失败', intent: 'error' });
     }
   };
 
@@ -225,15 +212,12 @@ const SettingsPage: React.FC = () => {
       return;
     }
 
-    setError('');
-    setSuccess('');
-
     try {
       await authAPI.deleteUser(userId);
-      setSuccess(`用户 ${username} 删除成功！`);
+      showToast({ title: "成功", body: `用户 ${username} 删除成功！`, intent: "success" });
       loadUsers(); // 重新加载用户列表
     } catch (err: any) {
-      setError(err.response?.data?.error || '删除用户失败');
+      showToast({ title: '错误', body: err.response?.data?.error || '删除用户失败', intent: 'error' });
     }
   };
 
@@ -243,7 +227,7 @@ const SettingsPage: React.FC = () => {
       const response = await authAPI.generatePassword(12);
       setNewUserPassword(response.data.password);
     } catch (err: any) {
-      setError(err.response?.data?.error || '生成密码失败');
+      showToast({ title: '错误', body: err.response?.data?.error || '生成密码失败', intent: 'error' });
     }
   };
 
@@ -253,7 +237,7 @@ const SettingsPage: React.FC = () => {
       const response = await authAPI.generatePassword(12);
       setResetPassword(response.data.password);
     } catch (err: any) {
-      setError(err.response?.data?.error || '生成密码失败');
+      showToast({ title: '错误', body: err.response?.data?.error || '生成密码失败', intent: 'error' });
     }
   };
 
@@ -267,27 +251,24 @@ const SettingsPage: React.FC = () => {
 
   const handlePasswordChange = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
-    setSuccess('');
-
     if (newPassword !== confirmPassword) {
-      setError('两次输入的新密码不一致');
+      showToast({ title: '错误', body: '两次输入的新密码不一致', intent: 'error' });
       return;
     }
 
     if (!user?.id) {
-      setError('用户信息无效，请重新登录');
+      showToast({ title: '错误', body: '用户信息无效，请重新登录', intent: 'error' });
       return;
     }
 
     try {
       await authAPI.changePassword(user.id, oldPassword, newPassword);
-      setSuccess('密码修改成功！');
+      showToast({ title: '成功', body: '密码修改成功！', intent: 'success' });
       setOldPassword('');
       setNewPassword('');
       setConfirmPassword('');
     } catch (err: any) {
-      setError(err.response?.data?.error || '密码修改失败');
+      showToast({ title: '错误', body: err.response?.data?.error || '密码修改失败', intent: 'error' });
     }
   };
 
@@ -311,16 +292,6 @@ const SettingsPage: React.FC = () => {
         {selectedTab === 'password' && (
           <div>
             <Title2>修改密码</Title2>
-            {error && (
-              <MessageBar intent="error" style={{ marginTop: '16px' }}>
-                <MessageBarBody>{error}</MessageBarBody>
-              </MessageBar>
-            )}
-            {success && (
-              <MessageBar intent="success" style={{ marginTop: '16px' }}>
-                <MessageBarBody>{success}</MessageBarBody>
-              </MessageBar>
-            )}
             <form onSubmit={handlePasswordChange} style={{ marginTop: '20px' }}>
               <div className={styles.formField}>
                 <label>当前密码</label>
@@ -403,11 +374,7 @@ const SettingsPage: React.FC = () => {
                 </div>
               </div>
               
-              <MessageBar intent="success" style={{ marginTop: '20px' }}>
-                <MessageBarBody>
-                  ✓ 主题已切换，立即生效！
-                </MessageBarBody>
-              </MessageBar>
+              <div style={{ padding: "12px", backgroundColor: "var(--colorPaletteGreenBackground2)", borderRadius: "4px", marginTop: "12px" }}>✓ 主题已切换，立即生效！</div>
             </div>
           </div>
         )}
@@ -474,11 +441,7 @@ const SettingsPage: React.FC = () => {
                 </div>
               </div>
               
-              <MessageBar intent="success" style={{ marginTop: '20px' }}>
-                <MessageBarBody>
-                  ✓ 设置已自动保存
-                </MessageBarBody>
-              </MessageBar>
+              <div style={{ padding: "12px", backgroundColor: "var(--colorPaletteGreenBackground2)", borderRadius: "4px", marginTop: "12px" }}>✓ 设置已自动保存</div>
             </div>
           </div>
         )}
@@ -530,11 +493,7 @@ const SettingsPage: React.FC = () => {
                 </Button>
               </div>
               
-              <MessageBar intent="warning" style={{ marginTop: '20px' }}>
-                <MessageBarBody>
-                  ⚠️ 数据库维护功能需要管理员权限，请谨慎操作
-                </MessageBarBody>
-              </MessageBar>
+              <div style={{ padding: "12px", backgroundColor: "var(--colorPaletteYellowBackground2)", borderRadius: "4px", marginTop: "12px" }}>⚠️ 数据库维护功能需要管理员权限，请谨慎操作</div>
             </div>
           </div>
         )}
@@ -564,11 +523,7 @@ const SettingsPage: React.FC = () => {
                 </div>
               </div>
               
-              <MessageBar intent="info" style={{ marginTop: '20px' }}>
-                <MessageBarBody>
-                  💡 当前版本仅支持简体中文，其他语言正在开发中
-                </MessageBarBody>
-              </MessageBar>
+              <div style={{ padding: "12px", backgroundColor: "var(--colorNeutralBackground3)", borderRadius: "4px", marginTop: "12px" }}>💡 当前版本仅支持简体中文，其他语言正在开发中</div>
             </div>
           </div>
         )}
@@ -576,17 +531,6 @@ const SettingsPage: React.FC = () => {
         {selectedTab === 'users' && user?.isAdmin && (
           <div>
             <Title2>账号管理</Title2>
-            {error && (
-              <MessageBar intent="error" style={{ marginTop: '16px' }}>
-                <MessageBarBody>{error}</MessageBarBody>
-              </MessageBar>
-            )}
-            {success && (
-              <MessageBar intent="success" style={{ marginTop: '16px' }}>
-                <MessageBarBody>{success}</MessageBarBody>
-              </MessageBar>
-            )}
-            
             <div style={{ marginTop: '24px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
                 <Title3>用户列表</Title3>
@@ -728,12 +672,8 @@ const SettingsPage: React.FC = () => {
                 </div>
               )}
               
-              <MessageBar intent="info" style={{ marginTop: '20px' }}>
-                <MessageBarBody>
-                  💡 提示：新创建的用户默认拥有与管理员相同的权限，但无法管理其他用户账户。
-                  新用户首次登录时需要修改密码。
-                </MessageBarBody>
-              </MessageBar>
+              <div style={{ padding: "12px", backgroundColor: "var(--colorNeutralBackground3)", borderRadius: "4px", marginTop: "12px" }}>💡 提示：新创建的用户默认拥有与管理员相同的权限，但无法管理其他用户账户。
+                  新用户首次登录时需要修改密码。</div>
             </div>
           </div>
         )}

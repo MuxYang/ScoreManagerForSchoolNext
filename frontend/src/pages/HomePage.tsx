@@ -7,8 +7,6 @@ import {
   makeStyles,
   tokens,
   Spinner,
-  MessageBar,
-  MessageBarBody,
   Table,
   TableHeader,
   TableRow,
@@ -24,6 +22,7 @@ import {
   ClockRegular,
 } from '@fluentui/react-icons';
 import { scoreAPI } from '../services/api';
+import { useToast } from '../utils/toast';
 
 const useStyles = makeStyles({
   container: {
@@ -103,9 +102,9 @@ interface DashboardStats {
 
 const HomePage: React.FC = () => {
   const styles = useStyles();
+  const { showToast } = useToast();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
   const hasFetched = React.useRef(false);
 
   useEffect(() => {
@@ -118,12 +117,15 @@ const HomePage: React.FC = () => {
 
   const loadStats = async () => {
     setLoading(true);
-    setError('');
     try {
       const response = await scoreAPI.getDashboardStats();
       setStats(response.data);
     } catch (err: any) {
-      setError(err.response?.data?.error || '加载统计数据失败');
+      showToast({ 
+        title: '加载失败', 
+        body: err.response?.data?.error || '加载统计数据失败', 
+        intent: 'error' 
+      });
     } finally {
       setLoading(false);
     }
@@ -133,16 +135,6 @@ const HomePage: React.FC = () => {
     return (
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '400px' }}>
         <Spinner label="加载中..." />
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div style={{ padding: '24px' }}>
-        <MessageBar intent="error">
-          <MessageBarBody>{error}</MessageBarBody>
-        </MessageBar>
       </div>
     );
   }
@@ -184,19 +176,19 @@ const HomePage: React.FC = () => {
         <Card className={styles.statsCard}>
           <TrophyRegular className={styles.statsIcon} style={{ color: tokens.colorPaletteGoldForeground2 }} />
           <div className={styles.statsValue}>{stats.scoreCount}</div>
-          <div className={styles.statsLabel}>积分记录</div>
+          <div className={styles.statsLabel}>量化记录</div>
         </Card>
 
         <Card className={styles.statsCard}>
           <CheckmarkCircleRegular className={styles.statsIcon} style={{ color: tokens.colorPalettePurpleForeground2 }} />
           <div className={styles.statsValue}>{stats.qualifiedCount}</div>
-          <div className={styles.statsLabel}>达标人数 (≥6分)</div>
+          <div className={styles.statsLabel}>高分人数 (≥6分)</div>
         </Card>
       </div>
 
-      {/* 积分排名 */}
+      {/* 量化排名 */}
       <div className={styles.section}>
-        <Title2 style={{ marginBottom: '16px' }}>🏆 积分排名 TOP 10</Title2>
+        <Title2 style={{ marginBottom: '16px' }}>量化排名 TOP 10</Title2>
         <Card>
           <div style={{ padding: '16px' }}>
             {stats.topRankings.length === 0 ? (
@@ -248,12 +240,12 @@ const HomePage: React.FC = () => {
 
       {/* 达标学生列表 */}
       <div className={styles.section}>
-        <Title2 style={{ marginBottom: '16px' }}>✅ 达标学生列表 (≥6分)</Title2>
+        <Title2 style={{ marginBottom: '16px' }}>高分学生列表 (≥6分)</Title2>
         <Card>
           <div style={{ padding: '16px' }}>
             {stats.qualifiedStudents.length === 0 ? (
               <Body1 style={{ textAlign: 'center', color: tokens.colorNeutralForeground3, padding: '20px' }}>
-                暂无达标学生
+                暂无高分学生
               </Body1>
             ) : (
               <div className={styles.tableContainer}>
@@ -264,7 +256,7 @@ const HomePage: React.FC = () => {
                       <TableHeaderCell>姓名</TableHeaderCell>
                       <TableHeaderCell>学号</TableHeaderCell>
                       <TableHeaderCell>班级</TableHeaderCell>
-                      <TableHeaderCell>总积分</TableHeaderCell>
+                      <TableHeaderCell>总分</TableHeaderCell>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -292,11 +284,11 @@ const HomePage: React.FC = () => {
         </Card>
       </div>
 
-      {/* 最近积分记录 */}
+      {/* 最近量化记录 */}
       <div className={styles.section}>
         <Title2 style={{ marginBottom: '16px' }}>
           <ClockRegular style={{ marginRight: '8px', verticalAlign: 'middle' }} />
-          最近积分记录
+          最近量化记录
         </Title2>
         <Card>
           <div style={{ padding: '16px' }}>
@@ -312,7 +304,7 @@ const HomePage: React.FC = () => {
                       <TableHeaderCell>学生</TableHeaderCell>
                       <TableHeaderCell>学号</TableHeaderCell>
                       <TableHeaderCell>班级</TableHeaderCell>
-                      <TableHeaderCell>积分</TableHeaderCell>
+                      <TableHeaderCell>分数</TableHeaderCell>
                       <TableHeaderCell>事由</TableHeaderCell>
                       <TableHeaderCell>教师</TableHeaderCell>
                       <TableHeaderCell>日期</TableHeaderCell>

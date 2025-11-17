@@ -91,8 +91,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     if (!token) return;
 
     try {
-      // 使用一个简单的健康检查接口
-      const response = await fetch('/api/auth/token', {
+      // 使用静默的健康检查接口（不记录日志）
+      const response = await fetch('/ping', {
         method: 'GET',
         signal: AbortSignal.timeout(5000), // 5秒超时
       });
@@ -324,10 +324,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         // 检查当前配置的模型是否在列表中
         if (aiModel && models.includes(aiModel)) {
           // 模型匹配，显示成功通知
-          showAiModelNotification('success', `AI 模型配置正常：${aiModel}`, 5000);
+          showAiModelNotification('success', `AI 模型配置正常：${aiModel}`, 3000);
         } else {
           // 模型不匹配，显示警告通知
-          showAiModelNotification('warning', `警告：配置的模型 ${aiModel} 不在可用列表中`, 10000);
+          showAiModelNotification('warning', `警告：配置的模型 ${aiModel} 不在可用列表中`, 3000);
         }
       } else {
         throw new Error('返回的数据格式不正确');
@@ -335,7 +335,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     } catch (err: any) {
       // 获取失败，显示错误通知
       console.warn('检查AI模型失败:', err.message);
-      showAiModelNotification('error', 'AI 模型检查失败：' + (err.message || '无法连接到AI服务'), 10000);
+      showAiModelNotification('error', 'AI 模型检查失败：' + (err.message || '无法连接到AI服务'), 3000);
     }
   };
 

@@ -51,37 +51,104 @@ router.get('/students/excel', authenticateToken, async (_req: Request, res: Resp
   }
 });
 
-// 导出积分数据为 Excel
-router.get('/scores/excel', authenticateToken, async (_req: Request, res: Response) => {
+// 导出积分数据为 Excel（支持日期范围过滤，排除占位记录）
+router.get('/scores/excel', authenticateToken, async (req: Request, res: Response) => {
   try {
-    const scores = db.prepare(`
-      SELECT s.*, st.student_id, st.name, st.class
+    const { startDate, endDate } = req.query;
+    
+    // 构建查询条件
+    let query = `
+      SELECT 
+        s.id,
+        s.date as '日期',
+        st.student_id as '学号',
+        st.name as '姓名',
+        st.class as '班级',
+        s.points as '分数',
+        s.reason as '原因',
+        s.teacher_name as '记录教师',
+        s.created_at as '创建时间'
       FROM scores s
       JOIN students st ON s.student_id = st.id
-      ORDER BY s.date DESC
-    `).all();
+      WHERE s.date != '1970-01-01'
+    `;
+    const params: any[] = [];
+
+    // 添加日期范围过滤
+    if (startDate) {
+      query += ' AND s.date >= ?';
+      params.push(startDate);
+    }
+
+    if (endDate) {
+      query += ' AND s.date <= ?';
+      params.push(endDate);
+    }
+
+    query += ' ORDER BY s.date DESC, s.created_at DESC';
+
+    const scores = db.prepare(query).all(...params);
 
     const workbook = new ExcelJS.Workbook();
-    const worksheet = workbook.addWorksheet('积分记录');
+    const worksheet = workbook.addWorksheet('学生量化记录');
 
-    // 设置列头
-    if (scores.length > 0) {
-      const columns = Object.keys(scores[0] as object).map(key => ({
-        header: key,
-        key: key,
-        width: 15
-      }));
-      worksheet.columns = columns;
-      worksheet.addRows(scores);
-    }
+    // 设置列定义（使用中文列头）
+    worksheet.columns = [
+      { header: '日期', key: '日期', width: 12 },
+      { header: '学号', key: '学号', width: 15 },
+      { header: '姓名', key: '姓名', width: 10 },
+      { header: '班级', key: '班级', width: 12 },
+      { header: '分数', key: '分数', width: 8 },
+      { header: '原因', key: '原因', width: 30 },
+      { header: '记录教师', key: '记录教师', width: 10 },
+    ];
+
+    // 设置表头样式
+    worksheet.getRow(1).font = { bold: true };
+    worksheet.getRow(1).alignment = { horizontal: 'center', vertical: 'middle' };
+    worksheet.getRow(1).fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FFD3D3D3' }
+    };
+
+    // 添加数据行（不包含具体时间）
+    scores.forEach((score: any) => {
+      worksheet.addRow({
+        '日期': score['日期'],
+        '学号': score['学号'],
+        '姓名': score['姓名'],
+        '班级': score['班级'],
+        '分数': score['分数'],
+        '原因': score['原因'],
+        '记录教师': score['记录教师']
+      });
+    });
 
     const buffer = await workbook.xlsx.writeBuffer();
 
+    // 生成文件名
+    let filename = '学生量化记录';
+    if (startDate && endDate) {
+      filename += `_${startDate}_至_${endDate}`;
+    } else if (startDate) {
+      filename += `_${startDate}_之后`;
+    } else if (endDate) {
+      filename += `_${endDate}_之前`;
+    } else {
+      filename += `_全部`;
+    }
+    filename += '.xlsx';
+
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', 'attachment; filename=scores.xlsx');
+    res.setHeader('Content-Disposition', `attachment; filename=${encodeURIComponent(filename)}`);
     res.send(buffer);
 
-    logger.info('Score data exported successfully');
+    logger.info('Score data exported successfully', { 
+      count: scores.length, 
+      startDate, 
+      endDate 
+    });
   } catch (error) {
     logger.error('Failed to export score data:', error);
     res.status(500).json({ error: '导出积分数据失败' });

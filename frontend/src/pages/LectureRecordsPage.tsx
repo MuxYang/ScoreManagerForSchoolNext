@@ -25,9 +25,6 @@ import {
   makeStyles,
   tokens,
   Spinner,
-  MessageBar,
-  MessageBarBody,
-  MessageBarTitle,
   useToastController,
   Toast,
   ToastTitle,
@@ -42,6 +39,7 @@ import {
   CalendarLtr20Regular,
 } from '@fluentui/react-icons';
 import { lectureRecordsAPI } from '../services/api';
+import { useToast } from '../utils/toast';
 import { useAuth } from '../contexts/AuthContext';
 import PageTitle from '../components/PageTitle';
 
@@ -107,6 +105,7 @@ interface LectureRecord {
 }
 
 const LectureRecordsPage: React.FC = () => {
+  const { showToast } = useToast();
   const styles = useStyles();
   const toasterId = useId('toaster');
   const { dispatchToast } = useToastController(toasterId);
@@ -114,7 +113,7 @@ const LectureRecordsPage: React.FC = () => {
 
   const [records, setRecords] = useState<LectureRecord[]>([]);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+
 
   // Filter states
   const [startDate, setStartDate] = useState('');
@@ -157,7 +156,6 @@ const LectureRecordsPage: React.FC = () => {
   // Fetch records
   const fetchRecords = async () => {
     setLoading(true);
-    setError(null);
     try {
       const filters: any = {};
       if (startDate) filters.startDate = startDate;
@@ -169,7 +167,7 @@ const LectureRecordsPage: React.FC = () => {
       const response = await lectureRecordsAPI.getAll(filters);
       setRecords(response.data);
     } catch (err: any) {
-      setError(err.response?.data?.error || '加载听课记录失败');
+      showToast({ title: '错误', body: err.response?.data?.error || '加载听课记录失败', intent: 'error' });
       dispatchToast(
         <Toast>
           <ToastTitle>加载失败：{err.response?.data?.error || '未知错误'}</ToastTitle>
@@ -205,7 +203,7 @@ const LectureRecordsPage: React.FC = () => {
   useEffect(() => {
     // Check if user is authenticated
     if (!user) {
-      setError('请先登录');
+      showToast({ title: '错误', body: '请先登录', intent: 'error' });
       return;
     }
     
@@ -711,15 +709,6 @@ const LectureRecordsPage: React.FC = () => {
       </Card>
 
       {/* Error message */}
-      {error && (
-        <MessageBar intent="error" style={{ marginBottom: '16px' }}>
-          <MessageBarBody>
-            <MessageBarTitle>错误</MessageBarTitle>
-            {error}
-          </MessageBarBody>
-        </MessageBar>
-      )}
-
       {/* Table */}
       <Card className={styles.tableCard}>
         {loading ? (

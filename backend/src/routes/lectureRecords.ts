@@ -15,7 +15,7 @@ router.get('/', async (req: Request, res: Response) => {
   try {
     const { startDate, endDate, observerName, teachingName, className } = req.query;
     
-    let query = 'SELECT * FROM teaching_observations WHERE 1=1';
+    let query = "SELECT * FROM teaching_observations WHERE date != '1970-01-01'";
     const params: any[] = [];
     
     if (startDate) {
@@ -147,7 +147,7 @@ router.get('/:id', async (req: Request, res: Response) => {
 router.post('/', async (req: Request, res: Response) => {
   try {
     const authReq = req as AuthRequest;
-    const { observerTeacherName, teachingTeacherName, className, date, notes } = req.body;
+    const { observerTeacherName, teachingTeacherName, className, date, notes, period } = req.body;
     
     if (!observerTeacherName || !teachingTeacherName || !className) {
       return res.status(400).json({ 
@@ -155,15 +155,18 @@ router.post('/', async (req: Request, res: Response) => {
       });
     }
     
+    const periodValue = Math.min(13, Math.max(1, Number(period) || 1));
+
     const result = db.prepare(`
       INSERT INTO teaching_observations 
-      (observer_teacher_name, teaching_teacher_name, class, date, notes, created_by)
-      VALUES (?, ?, ?, ?, ?, ?)
+      (observer_teacher_name, teaching_teacher_name, class, date, period, notes, created_by)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
     `).run(
       observerTeacherName,
       teachingTeacherName,
       className,
       date || new Date().toISOString().split('T')[0],
+      periodValue,
       notes || null,
       authReq.userId
     );
@@ -189,7 +192,7 @@ router.post('/', async (req: Request, res: Response) => {
 router.put('/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { observerTeacherName, teachingTeacherName, className, date, notes } = req.body;
+    const { observerTeacherName, teachingTeacherName, className, date, notes, period } = req.body;
     
     const record = db.prepare('SELECT * FROM teaching_observations WHERE id = ?').get(id);
     if (!record) {
@@ -202,12 +205,15 @@ router.put('/:id', async (req: Request, res: Response) => {
       });
     }
     
+    const periodValue = Math.min(13, Math.max(1, Number(period) || 1));
+
     db.prepare(`
       UPDATE teaching_observations 
       SET observer_teacher_name = ?,
           teaching_teacher_name = ?,
           class = ?,
           date = ?,
+          period = ?,
           notes = ?
       WHERE id = ?
     `).run(
@@ -215,6 +221,7 @@ router.put('/:id', async (req: Request, res: Response) => {
       teachingTeacherName,
       className,
       date,
+      periodValue,
       notes || null,
       id
     );
@@ -266,8 +273,8 @@ router.post('/batch', async (req: Request, res: Response) => {
     
     const insertStmt = db.prepare(`
       INSERT INTO teaching_observations 
-      (observer_teacher_name, teaching_teacher_name, class, date, notes, created_by)
-      VALUES (?, ?, ?, ?, ?, ?)
+      (observer_teacher_name, teaching_teacher_name, class, date, period, notes, created_by)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
     `);
     
     let successCount = 0;
@@ -275,18 +282,21 @@ router.post('/batch', async (req: Request, res: Response) => {
     
     records.forEach((record: any, index: number) => {
       try {
-        const { teacherName, teachName, class: className, date, notes } = record;
+        const { teacherName, teachName, class: className, date, notes, period } = record;
         
         if (!teacherName || !teachName || !className) {
           errors.push(`Record ${index + 1}: Missing required fields`);
           return;
         }
         
+        const periodValue = Math.min(13, Math.max(1, Number(period) || 1));
+
         insertStmt.run(
           teacherName,
           teachName,
           className,
           date || new Date().toISOString().split('T')[0],
+          periodValue,
           notes || null,
           authReq.userId
         );
@@ -316,12 +326,12 @@ router.post('/batch', async (req: Request, res: Response) => {
   }
 });
 
-// Export lecture records to Excel
+// Export lecture records to Excel（排除占位记录）
 router.post('/export', async (req: Request, res: Response) => {
   try {
     const { startDate, endDate } = req.body;
     
-    let query = 'SELECT * FROM teaching_observations WHERE 1=1';
+    let query = "SELECT * FROM teaching_observations WHERE date != '1970-01-01'";
     const params: any[] = [];
     
     if (startDate) {
@@ -345,6 +355,7 @@ router.post('/export', async (req: Request, res: Response) => {
     // Define columns
     worksheet.columns = [
       { header: '日期', key: 'date', width: 12 },
+      { header: '节数', key: 'period', width: 8 },
       { header: '听课教师姓名', key: 'observer_teacher_name', width: 15 },
       { header: '授课教师姓名', key: 'teaching_teacher_name', width: 15 },
       { header: '班级', key: 'class', width: 12 },
@@ -359,6 +370,7 @@ router.post('/export', async (req: Request, res: Response) => {
     records.forEach((record) => {
       worksheet.addRow({
         date: record.date,
+        period: record.period || 1,
         observer_teacher_name: record.observer_teacher_name,
         teaching_teacher_name: record.teaching_teacher_name,
         class: record.class,

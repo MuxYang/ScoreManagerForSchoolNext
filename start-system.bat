@@ -7,8 +7,21 @@ echo    Student Score System - Starting
 echo ========================================
 echo.
 
+REM Check if pwsh (PowerShell 7+) is available
+echo [Check] Detecting PowerShell version...
+where pwsh >nul 2>&1
+if %ERRORLEVEL% EQU 0 (
+    echo [OK] Found PowerShell Core ^(pwsh^)
+    echo.
+    pwsh -File "%~dp0start-optimized.ps1"
+    goto :end
+)
+
+REM Fallback to PowerShell 5.x
+echo [INFO] PowerShell Core not found, using Windows PowerShell 5.x
+echo.
+
 REM Check PowerShell execution policy
-echo [Check] Checking PowerShell execution policy...
 powershell -Command "Get-ExecutionPolicy" >nul 2>&1
 if %ERRORLEVEL% NEQ 0 (
     echo [ERROR] Cannot check PowerShell execution policy
@@ -38,6 +51,8 @@ if /i "%POLICY%"=="Restricted" (
     echo.
     powershell -ExecutionPolicy Bypass -File "%~dp0start-optimized.ps1"
 )
+
+:end
 
 if %ERRORLEVEL% NEQ 0 (
     echo.
