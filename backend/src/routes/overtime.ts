@@ -457,27 +457,53 @@ router.post('/import-data', (req, res, next) => {
 // Get time points configuration
 router.get('/time-points', (req, res) => {
   try {
-    // Default time points - can be stored in database in future
-    const timePoints = [
-      '07:30',
-      '08:00',
-      '09:00',
-      '10:00',
-      '11:00',
-      '14:00',
-      '15:00',
-      '16:00',
-      '17:00',
-      '18:00',
-      '18:30',
-      '19:00',
-      '20:00',
-      '21:30'
-    ];
-    res.json({ success: true, data: timePoints });
+    const timePoints = db.prepare(`
+      SELECT time_point FROM overtime_time_points ORDER BY time_point
+    `).all() as any[];
+    res.json({ success: true, data: timePoints.map(tp => tp.time_point) });
   } catch (error) {
     logger.error('Failed to get time points', { error });
     res.status(500).json({ error: 'Failed to retrieve time points' });
+  }
+});
+
+// Add time point
+router.post('/time-points', (req, res) => {
+  try {
+    const { time_point } = req.body;
+    
+    if (!time_point || !/^\d{2}:\d{2}$/.test(time_point)) {
+      return res.status(400).json({ error: 'Invalid time point format. Expected HH:mm' });
+    }
+    
+    // Check if already exists
+    const existing = db.prepare('SELECT id FROM overtime_time_points WHERE time_point = ?').get(time_point);
+    if (existing) {
+      return res.status(400).json({ error: 'Time point already exists' });
+    }
+    
+    db.prepare('INSERT INTO overtime_time_points (time_point) VALUES (?)').run(time_point);
+    res.json({ success: true, message: 'Time point added successfully' });
+  } catch (error) {
+    logger.error('Failed to add time point', { error });
+    res.status(500).json({ error: 'Failed to add time point' });
+  }
+});
+
+// Delete time point
+router.delete('/time-points/:timePoint', (req, res) => {
+  try {
+    const { timePoint } = req.params;
+    const result = db.prepare('DELETE FROM overtime_time_points WHERE time_point = ?').run(timePoint);
+    
+    if (result.changes === 0) {
+      return res.status(404).json({ error: 'Time point not found' });
+    }
+    
+    res.json({ success: true, message: 'Time point deleted successfully' });
+  } catch (error) {
+    logger.error('Failed to delete time point', { error });
+    res.status(500).json({ error: 'Failed to delete time point' });
   }
 });
 

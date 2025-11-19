@@ -427,6 +427,10 @@ export const overtimeRecordsAPI = {
   },
   
   getTimePoints: () => apiClient.get('/overtime/time-points'),
+  
+  addTimePoint: (timePoint: string) => apiClient.post('/overtime/time-points', { time_point: timePoint }),
+  
+  deleteTimePoint: (timePoint: string) => apiClient.delete(`/overtime/time-points/${encodeURIComponent(timePoint)}`),
 };
 
 export default apiClient;

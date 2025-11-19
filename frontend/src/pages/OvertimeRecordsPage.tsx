@@ -500,36 +500,46 @@ const OvertimeRecordsPage: React.FC = () => {
   };
 
   // 添加时间点
-  const handleAddTimePoint = () => {
+  const handleAddTimePoint = async () => {
     const trimmed = newTimePoint.trim();
     if (!trimmed) {
       showToast({ title: '输入错误', body: '请输入时间点', intent: 'warning' });
       return;
     }
-    
+
     // 验证时间格式 HH:mm
     const timePattern = /^([0-1][0-9]|2[0-3]):([0-5][0-9])$/;
     if (!timePattern.test(trimmed)) {
       showToast({ title: '格式错误', body: '时间格式应为 HH:mm（24小时制）', intent: 'warning' });
       return;
     }
-    
+
     if (availableTimePoints.includes(trimmed)) {
       showToast({ title: '重复添加', body: '该时间点已存在', intent: 'warning' });
       return;
     }
-    
-    const newPoints = [...availableTimePoints, trimmed].sort();
-    setAvailableTimePoints(newPoints);
-    setNewTimePoint('');
-    showToast({ title: '添加成功', body: `已添加时间点：${trimmed}`, intent: 'success' });
+
+    try {
+      await overtimeRecordsAPI.addTimePoint(trimmed);
+      const newPoints = [...availableTimePoints, trimmed].sort();
+      setAvailableTimePoints(newPoints);
+      setNewTimePoint('');
+      showToast({ title: '添加成功', body: `已添加时间点：${trimmed}`, intent: 'success' });
+    } catch (error: any) {
+      showToast({ title: '添加失败', body: error.response?.data?.error || '添加时间点失败', intent: 'error' });
+    }
   };
 
   // 删除时间点
-  const handleDeleteTimePoint = (timePoint: string) => {
-    const newPoints = availableTimePoints.filter(tp => tp !== timePoint);
-    setAvailableTimePoints(newPoints);
-    showToast({ title: '删除成功', body: `已删除时间点：${timePoint}`, intent: 'success' });
+  const handleDeleteTimePoint = async (timePoint: string) => {
+    try {
+      await overtimeRecordsAPI.deleteTimePoint(timePoint);
+      const newPoints = availableTimePoints.filter(tp => tp !== timePoint);
+      setAvailableTimePoints(newPoints);
+      showToast({ title: '删除成功', body: `已删除时间点：${timePoint}`, intent: 'success' });
+    } catch (error: any) {
+      showToast({ title: '删除失败', body: error.response?.data?.error || '删除时间点失败', intent: 'error' });
+    }
   };
 
   const openDetailById = async (teacherId: number) => {
